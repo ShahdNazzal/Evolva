@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui/card";
@@ -17,11 +17,17 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   CalendarDays,
   Moon,
   CheckCircle2,
+  Ruler,
+  Weight,
+  Target,
+  Activity,
 } from "lucide-react";
-import { bmiCategory } from "@/lib/workout-rules";
+import { bmiCategory, GOAL_LABELS, ACTIVITY_LABELS, type Goal, type ActivityLevel } from "@/lib/workout-rules";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // نستخدم هاد المتغير بكل استعلامات عمود "read" لأنه ملف الأنواع التلقائي تبع Supabase
@@ -31,6 +37,10 @@ const db = supabase as any;
 // جدول workout_logs فيه عمودين جديدين (day_index و exercise_index) مش موجودين بعد بملف الأنواع
 // المولّد تلقائياً تبع Supabase — نفس فكرة "db" فوق، بس مخصص لجدول workout_logs
 const workoutLogsTable = () => (supabase as any).from("workout_logs");
+
+// جدول user_fitness_profile فيه أعمدة (goal, activity_level, weight, height, frequency, bmi)
+// مش كلها موجودة بملف الأنواع التلقائي دايماً، فبنعامله كـ any عشان نضمن ما في أخطاء تايبسكريبت
+const fitnessProfileTable = () => (supabase as any).from("user_fitness_profile");
 
 const DAYS = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 const DAYS_SHORT = ["أحد", "إثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت"];
@@ -98,7 +108,7 @@ function HomePage() {
 
       const [{ data: p }, { data: f }, { data: logs }, { data: sel }, { data: weights }] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-        supabase.from("user_fitness_profile").select("*").eq("user_id", user.id).maybeSingle(),
+        fitnessProfileTable().select("*").eq("user_id", user.id).maybeSingle(),
         supabase.from("workout_logs").select("completed_at").eq("user_id", user.id).order("completed_at", { ascending: false }),
         supabase.from("active_plan_selection").select("*").eq("user_id", user.id).maybeSingle(),
         supabase
@@ -570,7 +580,6 @@ function WorkoutCalendarCard({
 
 /* ------------------------------------------------------------------ */
 /* الالتزام الأسبوعي: أيام تمرّنتِ فيها هالأسبوع + الستريك                */
-/* (ما في أي رقم "إجمالي عمرك بالتمرين" — هيك أرقام مالها فايدة حقيقية)   */
 /* ------------------------------------------------------------------ */
 
 function WeeklyProgressCard({ completed, goal, streak }: { completed: number; goal: number; streak: number }) {
@@ -746,28 +755,292 @@ function QuickAction({ to, icon, title, badge }: { to: any; icon: React.ReactNod
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* صفحة المدرّبة                                                       */
-/* ------------------------------------------------------------------ */
+/* ==================================================================== */
+/* صفحة المدرّبة — تتضمن الآن قائمة كاملة بالمشتركات وتفاصيل كل واحدة     */
+/* ==================================================================== */
+
+type SubscriberInfo = {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  goal: string | null;
+  activity_level: string | null;
+  weight: number | null;
+  height: number | null;
+  weeklyGoal: number;
+  weeklyDone: number;
+  hasActivePlan: boolean;
+};
+
+// بنحدد تقييم الأداء بشكل واضح ومحفّز بدل رقم مجرّد
+function performanceMeta(sub: SubscriberInfo): { text: string; className: string } {
+  if (!sub.hasActivePlan) {
+    return { text: "لسا ما اعتمدت خطة تمرين", className: "text-muted-foreground bg-muted" };
+  }
+  if (sub.weeklyGoal <= 0) {
+    return { text: "بلا هدف أسبوعي محدد", className: "text-muted-foreground bg-muted" };
+  }
+  const pct = sub.weeklyDone / sub.weeklyGoal;
+  if (pct >= 1) return { text: "أداء ممتاز 🔥", className: "text-emerald-600 bg-emerald-500/10" };
+  if (pct >= 0.5) return { text: "أداء جيد 👍", className: "text-primary bg-primary/10" };
+  if (sub.weeklyDone > 0) return { text: "بحاجة لمتابعة أكثر", className: "text-orange-600 bg-orange-500/10" };
+  return { text: "لم تتمرّن هالأسبوع بعد", className: "text-destructive bg-destructive/10" };
+}
 
 function TrainerHome({ userId, unreadCount }: { userId: string; unreadCount: number }) {
-  const [subs, setSubs] = useState(0);
-  const [posts, setPosts] = useState(0);
+  const [subscribers, setSubscribers] = useState<SubscriberInfo[]>([]);
+  const [postsCount, setPostsCount] = useState(0);
+  const [loadingSubs, setLoadingSubs] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
-      const [{ count: s }, { count: p }] = await Promise.all([
-        supabase.from("subscriptions").select("*", { count: "exact", head: true }).eq("trainer_id", userId).eq("status", "active"),
-        supabase.from("posts").select("*", { count: "exact", head: true }).eq("trainer_id", userId),
+      setLoadingSubs(true);
+
+      const { count: p } = await supabase
+        .from("posts")
+        .select("*", { count: "exact", head: true })
+        .eq("trainer_id", userId);
+      setPostsCount(p ?? 0);
+
+      // 1) قائمة المشتركات الفعّالات مع هذه المدربة
+      const { data: subsRows } = await supabase
+        .from("subscriptions")
+        .select("user_id")
+        .eq("trainer_id", userId)
+        .eq("status", "active");
+
+      const ids = (subsRows ?? []).map((s: any) => s.user_id as string);
+
+      if (ids.length === 0) {
+        setSubscribers([]);
+        setLoadingSubs(false);
+        return;
+      }
+
+      const now = new Date();
+      const weekStart = new Date(now);
+      weekStart.setHours(0, 0, 0, 0);
+      weekStart.setDate(now.getDate() - now.getDay());
+
+      // 2) نجيب كل بيانات المشتركات دفعة وحدة (batched) بدل ما نستعلم لكل وحدة لحالها
+      const [{ data: profs }, { data: fps }, { data: sels }, { data: logs }] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, avatar_url").in("id", ids),
+        fitnessProfileTable().select("*").in("user_id", ids),
+        supabase.from("active_plan_selection").select("*").in("user_id", ids),
+        supabase
+          .from("workout_logs")
+          .select("user_id, completed_at")
+          .in("user_id", ids)
+          .gte("completed_at", weekStart.toISOString()),
       ]);
-      setSubs(s ?? 0);
-      setPosts(p ?? 0);
+
+      // 3) نجيب min_frequency لخطط التمارين النشطة عند المشتركات (عشان نعرف هدفهن الأسبوعي الحقيقي)
+      const workoutIds = [...new Set((sels ?? []).filter((s: any) => s.workout_plan_id).map((s: any) => s.workout_plan_id))];
+      const workoutsById = new Map<string, any>();
+      if (workoutIds.length > 0) {
+        const { data: ws } = await supabase.from("workouts").select("id, min_frequency").in("id", workoutIds);
+        (ws ?? []).forEach((w: any) => workoutsById.set(w.id, w));
+      }
+
+      const profById = new Map<string, any>();
+      (profs ?? []).forEach((p: any) => profById.set(p.id, p));
+      const fpById = new Map<string, any>();
+      (fps ?? []).forEach((f: any) => fpById.set(f.user_id, f));
+      const selById = new Map<string, any>();
+      (sels ?? []).forEach((s: any) => selById.set(s.user_id, s));
+
+      // عدد الأيام (المختلفة) اللي تمرّنت فيها كل مشتركة هالأسبوع
+      const logsByUser = new Map<string, Set<string>>();
+      (logs ?? []).forEach((l: any) => {
+        const dayKey = new Date(l.completed_at).toDateString();
+        if (!logsByUser.has(l.user_id)) logsByUser.set(l.user_id, new Set());
+        logsByUser.get(l.user_id)!.add(dayKey);
+      });
+
+      const list: SubscriberInfo[] = ids.map((uid) => {
+        const prof = profById.get(uid);
+        const fp = fpById.get(uid);
+        const sel = selById.get(uid);
+        const w = sel?.workout_plan_id ? workoutsById.get(sel.workout_plan_id) : null;
+        const weeklyGoal = w?.min_frequency ?? fp?.frequency ?? 0;
+        const weeklyDone = logsByUser.get(uid)?.size ?? 0;
+        return {
+          id: uid,
+          full_name: prof?.full_name ?? null,
+          avatar_url: prof?.avatar_url ?? null,
+          goal: fp?.goal ?? null,
+          activity_level: fp?.activity_level ?? null,
+          weight: fp?.weight ?? null,
+          height: fp?.height ?? null,
+          weeklyGoal,
+          weeklyDone,
+          hasActivePlan: !!sel?.workout_plan_id,
+        };
+      });
+
+      // نرتبهن: الأقل التزامًا فوق، عشان المدربة تنتبه أول شي للي محتاجات متابعة
+      list.sort((a, b) => {
+        const pctA = a.weeklyGoal > 0 ? a.weeklyDone / a.weeklyGoal : -1;
+        const pctB = b.weeklyGoal > 0 ? b.weeklyDone / b.weeklyGoal : -1;
+        return pctA - pctB;
+      });
+
+      setSubscribers(list);
+      setLoadingSubs(false);
     })();
   }, [userId]);
+
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard icon={<TrendingUp />} value={subs} label="مشتركات" />
-        <StatCard icon={<Sparkles />} value={posts} label="منشورات" />
+      {/* بطاقة عدد المشتركات — بديل بطاقتي "مشتركات" و"منشورات" القديمتين */}
+      <Card className="p-5 rounded-3xl gradient-primary text-primary-foreground border-none shadow-elegant relative overflow-hidden">
+        <div className="absolute -top-8 -left-8 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+        <div className="relative flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 opacity-90 text-sm">
+              <Users className="w-4 h-4" /> مشتركاتك حالياً
+            </div>
+            <div className="text-4xl font-extrabold mt-1">{loadingSubs ? "…" : subscribers.length}</div>
+            <div className="text-xs opacity-90 mt-1">{postsCount} منشور نشرتيه لهلأ</div>
+          </div>
+          <div className="w-16 h-16 rounded-2xl bg-white/15 flex items-center justify-center">
+            <Sparkles className="w-8 h-8" />
+          </div>
+        </div>
+      </Card>
+
+      {/* قائمة المشتركات بتفاصيلهن الكاملة */}
+      <div>
+        <h2 className="font-bold mb-3 flex items-center gap-2">
+          <Activity className="w-4 h-4 text-primary" /> تقدّم المشتركات
+        </h2>
+
+        {loadingSubs && (
+          <div className="space-y-2">
+            <Skeleton className="h-20 rounded-2xl" />
+            <Skeleton className="h-20 rounded-2xl" />
+          </div>
+        )}
+
+        {!loadingSubs && subscribers.length === 0 && (
+          <Card className="p-6 text-center rounded-2xl border-dashed">
+            <Users className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">لا يوجد مشتركات بعد</p>
+            <p className="text-xs text-muted-foreground mt-1">لما تشترك أي مستخدمة معك، رح تظهر تفاصيلها هون تلقائياً</p>
+          </Card>
+        )}
+
+        <div className="space-y-2.5">
+          {subscribers.map((sub) => {
+            const isOpen = expandedId === sub.id;
+            const perf = performanceMeta(sub);
+            const pct = sub.weeklyGoal > 0 ? Math.min(100, Math.round((sub.weeklyDone / sub.weeklyGoal) * 100)) : 0;
+
+            return (
+              <Card key={sub.id} className="rounded-2xl overflow-hidden border-none shadow-soft">
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isOpen ? null : sub.id)}
+                  className="w-full flex items-center gap-3 p-3.5 text-right"
+                >
+                  {sub.avatar_url ? (
+                    <img src={sub.avatar_url} className="w-12 h-12 rounded-2xl object-cover shrink-0" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl gradient-primary text-primary-foreground flex items-center justify-center font-extrabold text-lg shrink-0">
+                      {sub.full_name?.[0] ?? "؟"}
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm truncate">{sub.full_name ?? "مستخدمة"}</div>
+                    <div className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 ${perf.className}`}>
+                      {perf.text}
+                    </div>
+                  </div>
+
+                  <div className="text-center shrink-0 px-2">
+                    <div className="text-sm font-extrabold">
+                      {sub.weeklyDone}/{sub.weeklyGoal || "—"}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground">أيام هالأسبوع</div>
+                  </div>
+
+                  {isOpen ? (
+                    <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                  )}
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-3.5 pb-4 pt-1 border-t border-border/60 space-y-3">
+                        {/* شريط تقدّم أسبوعي */}
+                        <div>
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
+                            <span>الالتزام الأسبوعي</span>
+                            <span className="font-bold text-foreground">{pct}%</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full rounded-full gradient-primary transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* بيانات جسمانية وهدف */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <StatChip
+                            icon={<Target className="w-3.5 h-3.5" />}
+                            label="الهدف"
+                            value={sub.goal ? GOAL_LABELS[sub.goal as Goal] ?? sub.goal : "غير محدد"}
+                          />
+                          <StatChip
+                            icon={<Activity className="w-3.5 h-3.5" />}
+                            label="مستوى النشاط"
+                            value={sub.activity_level ? ACTIVITY_LABELS[sub.activity_level as ActivityLevel] ?? sub.activity_level : "غير محدد"}
+                          />
+                          <StatChip
+                            icon={<Weight className="w-3.5 h-3.5" />}
+                            label="الوزن"
+                            value={sub.weight != null ? `${sub.weight} كغم` : "—"}
+                          />
+                          <StatChip
+                            icon={<Ruler className="w-3.5 h-3.5" />}
+                            label="الطول"
+                            value={sub.height != null ? `${sub.height} سم` : "—"}
+                          />
+                        </div>
+
+                        {(!sub.goal || !sub.activity_level || sub.weight == null || sub.height == null) && (
+                          <p className="text-[10px] text-muted-foreground text-center">
+                            ما زالت لم تكمّل كل بيانات ملفها الرياضي بعد
+                          </p>
+                        )}
+
+                        <Link
+                          to="/chat"
+                          className="flex items-center justify-center gap-1.5 text-xs font-bold text-primary bg-primary/10 rounded-xl py-2"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" /> راسليها
+                        </Link>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
       <Link to="/chat" className="block">
@@ -796,12 +1069,14 @@ function TrainerHome({ userId, unreadCount }: { userId: string; unreadCount: num
   );
 }
 
-function StatCard({ icon, value, label }: { icon: React.ReactNode; value: any; label: string }) {
+function StatChip({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <Card className="p-4 rounded-2xl border-none shadow-soft">
-      <div className="text-primary mb-2">{icon}</div>
-      <div className="text-2xl font-extrabold">{value}</div>
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-    </Card>
+    <div className="rounded-xl bg-muted/60 p-2.5 flex items-center gap-2">
+      <span className="w-7 h-7 rounded-lg bg-background text-primary flex items-center justify-center shrink-0">{icon}</span>
+      <div className="min-w-0">
+        <div className="text-[9px] text-muted-foreground">{label}</div>
+        <div className="text-[11px] font-bold truncate">{value}</div>
+      </div>
+    </div>
   );
 }

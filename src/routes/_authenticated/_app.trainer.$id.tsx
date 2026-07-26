@@ -4,8 +4,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Heart, MessageCircle, ArrowRight, Grid3x3, Rows3, Dumbbell, Apple, UserPlus, UserCheck } from "lucide-react";
-import { motion } from "framer-motion";
+import {
+  Heart,
+  MessageCircle,
+  Grid3x3,
+  Rows3,
+  Dumbbell,
+  Apple,
+  UserPlus,
+  UserCheck,
+  Sparkles,
+  Send,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/_app/trainer/$id")({
@@ -25,6 +36,8 @@ function TrainerProfile() {
   const [tab, setTab] = useState<"posts" | "workouts" | "nutrition">("posts");
   const [view, setView] = useState<"grid" | "feed">("feed");
   const [following, setFollowing] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
   const [likes, setLikes] = useState<Set<string>>(new Set());
 
   const load = async () => {
@@ -39,6 +52,15 @@ function TrainerProfile() {
     if (user) {
       const { data: fav } = await supabase.from("trainer_favorites").select("trainer_id").eq("user_id", user.id).eq("trainer_id", id).maybeSingle();
       setFollowing(!!fav);
+
+      const { data: sub } = await supabase
+        .from("subscriptions")
+        .select("status")
+        .eq("user_id", user.id)
+        .eq("trainer_id", id)
+        .maybeSingle();
+      setSubscribed(!!sub && sub.status === "active");
+
       const { data: ls } = await supabase.from("post_likes").select("post_id").eq("user_id", user.id);
       setLikes(new Set((ls ?? []).map((x) => x.post_id)));
     }
@@ -54,6 +76,36 @@ function TrainerProfile() {
       await supabase.from("trainer_favorites").insert({ user_id: user.id, trainer_id: id });
       toast.success("تمت المتابعة 💖");
       setFollowing(true);
+    }
+  };
+
+  // الاشتراك مع المدربة: مبني على جدول subscriptions، وممكن للمستخدمة تشترك عند أكثر من مدربة بنفس الوقت
+  const toggleSubscribe = async () => {
+    if (!user || subscribing) return;
+    setSubscribing(true);
+    try {
+      if (subscribed) {
+        const { error } = await supabase
+          .from("subscriptions")
+          .update({ status: "cancelled" })
+          .eq("user_id", user.id)
+          .eq("trainer_id", id);
+        if (error) throw error;
+        setSubscribed(false);
+        toast.success("تم إلغاء الاشتراك مع هذه المدربة");
+      } else {
+        // upsert عشان قيد unique(user_id, trainer_id) — لو سبق واشتركت وألغت، هيك بترجع تفعّل نفس الصف
+        const { error } = await supabase
+          .from("subscriptions")
+          .upsert({ user_id: user.id, trainer_id: id, status: "active" }, { onConflict: "user_id,trainer_id" });
+        if (error) throw error;
+        setSubscribed(true);
+        toast.success("تم الاشتراك مع المدربة 🎉");
+      }
+    } catch (err: any) {
+      toast.error(err.message ?? "صار في خطأ، حاولي مرة ثانية");
+    } finally {
+      setSubscribing(false);
     }
   };
 
@@ -96,7 +148,6 @@ function TrainerProfile() {
 
   return (
     <div className="space-y-4">
-      <Button variant="ghost" onClick={() => navigate({ to: "/trainers" })} className="rounded-xl -mr-2"><ArrowRight className="w-4 h-4 ml-1" /> رجوع</Button>
 
       <Card className="p-6 rounded-3xl gradient-blush border-none">
         <div className="flex items-center gap-4">
@@ -115,23 +166,36 @@ function TrainerProfile() {
           </div>
         </div>
         {trainer?.bio && <p className="text-sm mt-4 leading-relaxed">{trainer.bio}</p>}
+
         {user?.id !== id && (
-          <div className="grid grid-cols-2 gap-2 mt-4">
-            <Button onClick={toggleFollow} variant={following ? "outline" : "default"} className="rounded-2xl gradient-primary">
-              {following ? <><UserCheck className="w-4 h-4 ml-1" /> متابَعة</> : <><UserPlus className="w-4 h-4 ml-1" /> متابعة</>}
-            </Button>
-            {/* بدل ما نودّي على قائمة الشات، منروح مباشرة عالمحادثة مع هالمدربة */}
+          <div className="mt-4 space-y-2">
+            {/* زر الاشتراك — العنصر الأبرز بالكارد، وفيه للمستخدمة تشترك عند أكثر من مدربة بنفس الوقت */}
             <Button
-              onClick={() => {
-                // TODO: احذفي هالسطر بعد ما تتأكدي إنه الرابط عم يتولد صح
-                console.log("[debug trainer] كبست رسالة، id المدربة =", id, "→ رايحين لـ /chat?with=" + id);
-                navigate({ to: "/chat", search: { with: id } });
-              }}
-              variant="outline"
-              className="rounded-2xl"
+              onClick={toggleSubscribe}
+              disabled={subscribing}
+              className={`w-full rounded-2xl font-extrabold ${subscribed ? "" : "gradient-primary"}`}
+              variant={subscribed ? "outline" : "default"}
             >
-              <MessageCircle className="w-4 h-4 ml-1" /> رسالة
+              {subscribed ? (
+                <><UserCheck className="w-4 h-4 ml-1.5" /> مشتركة مع {profile?.full_name ?? "المدربة"} ✓</>
+              ) : (
+                <><Sparkles className="w-4 h-4 ml-1.5" /> الاشتراك مع {profile?.full_name ?? "الكوتش"}</>
+              )}
             </Button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={toggleFollow} variant={following ? "outline" : "secondary"} className="rounded-2xl">
+                {following ? <><UserCheck className="w-4 h-4 ml-1" /> متابَعة</> : <><UserPlus className="w-4 h-4 ml-1" /> متابعة</>}
+              </Button>
+              {/* بدل ما نودّي على قائمة الشات، منروح مباشرة عالمحادثة مع هالمدربة */}
+              <Button
+                onClick={() => navigate({ to: "/chat", search: { with: id } })}
+                variant="outline"
+                className="rounded-2xl"
+              >
+                <MessageCircle className="w-4 h-4 ml-1" /> رسالة
+              </Button>
+            </div>
           </div>
         )}
       </Card>
@@ -175,6 +239,8 @@ function TrainerProfile() {
                       </button>
                       <span className="text-[10px] text-muted-foreground">{new Date(p.created_at).toLocaleDateString("ar")}</span>
                     </div>
+                    {/* التعليقات — نفس الخاصية الشغالة على منشورات المستخدمات العاديات، الآن متاحة على منشورات المدربات كمان */}
+                    <PostCommentsSection postId={p.id} userId={user?.id} />
                   </Card>
                 </motion.div>
               ))}
@@ -233,6 +299,139 @@ function TrainerProfile() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ==================================================================== */
+/* التعليقات على منشورات المدربة — مبنية على جدول post_comments مباشرة   */
+/* ==================================================================== */
+
+function PostCommentsSection({ postId, userId }: { postId: string; userId?: string }) {
+  const [open, setOpen] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [text, setText] = useState("");
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from("post_comments")
+      .select("*", { count: "exact", head: true })
+      .eq("post_id", postId)
+      .then(({ count: c }) => setCount(c ?? 0));
+  }, [postId]);
+
+  const loadComments = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("post_comments")
+      .select("*, profiles!post_comments_user_id_fkey(full_name, avatar_url)")
+      .eq("post_id", postId)
+      .order("created_at", { ascending: true });
+    if (!error) setComments(data ?? []);
+    setLoading(false);
+  };
+
+  const toggleOpen = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && comments.length === 0) loadComments();
+  };
+
+  const submitComment = async () => {
+    if (!userId) {
+      toast.error("لازم تسجّلي دخول للتعليق");
+      return;
+    }
+    if (!text.trim() || sending) return;
+    setSending(true);
+    try {
+      const { data, error } = await supabase
+        .from("post_comments")
+        .insert({ post_id: postId, user_id: userId, content: text.trim() })
+        .select("*, profiles!post_comments_user_id_fkey(full_name, avatar_url)")
+        .single();
+      if (error) throw error;
+      setComments((prev) => [...prev, data]);
+      setCount((c) => (c ?? 0) + 1);
+      setText("");
+    } catch (err: any) {
+      toast.error(err.message ?? "تعذر إضافة التعليق");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="px-4 pb-4 pt-1 border-t border-border/60 mt-1">
+      <button
+        type="button"
+        onClick={toggleOpen}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold py-2"
+      >
+        <MessageCircle className="w-3.5 h-3.5" />
+        {count === null ? "…" : count} {count === 1 ? "تعليق" : "تعليقات"}
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-2.5 pb-2">
+              {loading && <p className="text-[11px] text-muted-foreground">جارِ تحميل التعليقات...</p>}
+
+              {!loading && comments.length === 0 && (
+                <p className="text-[11px] text-muted-foreground">كوني أول من يعلّق على هذا المنشور</p>
+              )}
+
+              {!loading &&
+                comments.map((c) => (
+                  <div key={c.id} className="flex items-start gap-2">
+                    {c.profiles?.avatar_url ? (
+                      <img src={c.profiles.avatar_url} className="w-7 h-7 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold shrink-0">
+                        {c.profiles?.full_name?.[0] ?? "؟"}
+                      </div>
+                    )}
+                    <div className="bg-muted rounded-2xl px-3 py-1.5 flex-1 min-w-0">
+                      <div className="text-[11px] font-bold truncate">{c.profiles?.full_name ?? "مستخدمة"}</div>
+                      <div className="text-xs break-words">{c.content}</div>
+                    </div>
+                  </div>
+                ))}
+
+              {userId && (
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submitComment();
+                    }}
+                    placeholder="أضيفي تعليق..."
+                    className="flex-1 h-9 rounded-full border border-input bg-background px-3.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                  <button
+                    onClick={submitComment}
+                    disabled={sending || !text.trim()}
+                    className="w-9 h-9 shrink-0 rounded-full gradient-primary flex items-center justify-center disabled:opacity-40"
+                  >
+                    <Send className="w-3.5 h-3.5 text-white" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

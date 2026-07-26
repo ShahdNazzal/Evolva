@@ -24,6 +24,7 @@ const trainerItems = [
   { to: "/trainer-plans", label: "خططي", icon: ClipboardList },
   { to: "/search", label: "بحث", icon: Search },
   { to: "/chat", label: "الرسائل", icon: Users },
+ 
   { to: "/profile", label: "ملفي", icon: User },
 ] as const;
 

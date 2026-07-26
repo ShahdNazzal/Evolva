@@ -1,6 +1,3 @@
-
-
-//C:\Users\lenovo\Downloads\jammawia-main (1)\jammawia-main\src\routes\_authenticated\_app.ai-coach.tsx
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
@@ -13,12 +10,11 @@ import {
   Dumbbell,
   Flame,
   Apple,
-  HeartPulse,
   Mic,
   MicOff,
   Sparkles,
   Shield,
-  Pizza,
+  Moon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -33,6 +29,8 @@ const VALID_GOALS = ["lose_weight", "gain_muscle", "fitness", "tone"] as const;
 const VALID_ACTIVITY = ["sedentary", "light", "moderate", "high"] as const;
 const VALID_EQUIPMENT = ["home", "gym", "none"] as const;
 
+const DAYS = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+
 type Goal = (typeof VALID_GOALS)[number];
 type ActivityLevel = (typeof VALID_ACTIVITY)[number];
 type Equipment = (typeof VALID_EQUIPMENT)[number];
@@ -45,8 +43,11 @@ type ExerciseItem = {
   reps: number;
 };
 
+// نفس بنية أيام الأسبوع الثابت المستخدمة بخطط المستخدمة الشخصية وخطط المدربات
 type PlanDay = {
-  name: string;
+  day_of_week: number;
+  is_rest: boolean;
+  muscle_group: string | null;
   items: ExerciseItem[];
 };
 
@@ -65,6 +66,8 @@ type ChatMessage =
   | { role: "assistant"; kind: "text"; text: string }
   | { role: "assistant"; kind: "plan"; plan: Plan; saved: boolean };
 
+// نبني مصفوفة 7 أيام دائماً (0-6)، ونملأ أي فراغ أو رد ناقص من الشاتبوت بيوم راحة افتراضي
+// عشان تضل الخطة متوافقة 100% مع isFixedWeekPlan() المستخدمة بصفحة التمارين والصفحة الرئيسية
 function normalizePlan(raw: any): Plan | null {
   if (!raw || !Array.isArray(raw.exercises)) return null;
 
@@ -73,12 +76,17 @@ function normalizePlan(raw: any): Plan | null {
     ? raw.activity_level
     : "moderate";
   const equipment: Equipment = (VALID_EQUIPMENT as readonly string[]).includes(raw.equipment) ? raw.equipment : "gym";
-  const min_frequency = Number.isFinite(+raw.min_frequency) && +raw.min_frequency > 0 ? +raw.min_frequency : 3;
 
-  const exercises: PlanDay[] = raw.exercises.map((day: any, di: number) => ({
-    name: typeof day?.name === "string" && day.name.trim() ? day.name.trim() : `اليوم ${di + 1}`,
-    items: Array.isArray(day?.items)
-      ? day.items
+  const dayMap = new Map<number, any>();
+  raw.exercises.forEach((d: any) => {
+    const dow = Number(d?.day_of_week);
+    if (Number.isFinite(dow) && dow >= 0 && dow <= 6) dayMap.set(dow, d);
+  });
+
+  const exercises: PlanDay[] = Array.from({ length: 7 }, (_, dow) => {
+    const d = dayMap.get(dow);
+    const items: ExerciseItem[] = Array.isArray(d?.items)
+      ? d.items
           .filter((it: any) => it?.name?.trim())
           .map((it: any) => ({
             name: it.name.trim(),
@@ -87,10 +95,23 @@ function normalizePlan(raw: any): Plan | null {
             sets: Number.isFinite(+it.sets) ? +it.sets : 3,
             reps: Number.isFinite(+it.reps) ? +it.reps : 10,
           }))
-      : [],
-  }));
+      : [];
+    const is_rest = !!d?.is_rest || items.length === 0;
+    return {
+      day_of_week: dow,
+      is_rest,
+      muscle_group: !is_rest && typeof d?.muscle_group === "string" && d.muscle_group.trim() ? d.muscle_group.trim() : null,
+      items: is_rest ? [] : items,
+    };
+  });
 
-  if (exercises.length === 0 || exercises.every((d) => d.items.length === 0)) return null;
+  const hasAnyTraining = exercises.some((d) => !d.is_rest);
+  if (!hasAnyTraining) return null;
+
+  const min_frequency =
+    Number.isFinite(+raw.min_frequency) && +raw.min_frequency > 0
+      ? +raw.min_frequency
+      : exercises.filter((d) => !d.is_rest).length;
 
   return {
     name: typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : "خطة من AIVA",
@@ -281,6 +302,8 @@ function AICoachPage() {
         activity_level: msg.plan.activity_level,
         equipment: msg.plan.equipment,
         min_frequency: msg.plan.min_frequency,
+        // نفس بنية الأسبوع الثابت بالضبط (day_of_week + is_rest + muscle_group + items)
+        // فهي متوافقة تلقائيًا مع جدولك الأسبوعي وتقويم التقدّم بالصفحة الرئيسية
         exercises: msg.plan.exercises,
         is_public: false,
       });
@@ -378,7 +401,7 @@ function AICoachPage() {
                   );
                 }
 
-                // معاينة الخطة
+                // معاينة الخطة — نفس شكل عرض الأيام السبعة تبع جدولك الأسبوعي (يوم راحة / يوم تدريب بعضلته)
                 return (
                   <div key={i} className="flex items-start gap-2">
                     <span className="w-8 h-8 rounded-xl gradient-primary flex items-center justify-center shrink-0">
@@ -405,29 +428,39 @@ function AICoachPage() {
                       </div>
 
                       <div className="space-y-3">
-                        {m.plan.exercises.map((day, di) => (
-                          <div key={di} className="space-y-1.5">
-                            <div className="text-xs font-bold text-primary flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> {day.name}
-                            </div>
-                            <div className="space-y-1.5">
-                              {day.items.map((ex, ei) => (
-                                <div key={ei} className="bg-muted/60 rounded-xl px-3 py-2 space-y-1">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-xs font-bold">{ex.name}</span>
-                                    <span className="text-[11px] font-semibold text-primary shrink-0">
-                                      {ex.sets} × {ex.reps}
-                                    </span>
-                                  </div>
-                                  {ex.instruction && (
-                                    <p className="text-[11px] text-muted-foreground leading-relaxed">{ex.instruction}</p>
-                                  )}
-                                  {ex.tips && <p className="text-[11px] text-primary leading-relaxed">💡 {ex.tips}</p>}
+                        {m.plan.exercises.map((day, di) => {
+                          const label = day.muscle_group ? `${DAYS[day.day_of_week]} - ${day.muscle_group}` : DAYS[day.day_of_week];
+                          return (
+                            <div key={di} className="space-y-1.5">
+                              <div className="text-xs font-bold text-primary flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> {label}
+                                {day.is_rest && (
+                                  <span className="text-[9px] font-bold bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                                    <Moon className="w-2.5 h-2.5" /> راحة
+                                  </span>
+                                )}
+                              </div>
+                              {!day.is_rest && (
+                                <div className="space-y-1.5">
+                                  {day.items.map((ex, ei) => (
+                                    <div key={ei} className="bg-muted/60 rounded-xl px-3 py-2 space-y-1">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs font-bold">{ex.name}</span>
+                                        <span className="text-[11px] font-semibold text-primary shrink-0">
+                                          {ex.sets} × {ex.reps}
+                                        </span>
+                                      </div>
+                                      {ex.instruction && (
+                                        <p className="text-[11px] text-muted-foreground leading-relaxed">{ex.instruction}</p>
+                                      )}
+                                      {ex.tips && <p className="text-[11px] text-primary leading-relaxed">💡 {ex.tips}</p>}
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
 
                       {m.saved ? (
@@ -504,19 +537,19 @@ function AICoachPage() {
           </button>
 
           <Textarea
-  ref={textareaRef}
-  value={message}
-  onChange={(e) => setMessage(e.target.value)}
-  onKeyDown={(e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }}
-  placeholder="اكتبي سؤالك أو اطلبي خطة تمرين... (مثال: صممي لي خطة لشد الجسم)"
-  rows={1}
-  className="min-h-[40px] max-h-[200px] resize-none border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-1 py-2 text-sm"
-/>
+            ref={textareaRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+            placeholder="اكتبي سؤالك أو اطلبي خطة تمرين... (مثال: صممي لي خطة لشد الجسم)"
+            rows={1}
+            className="min-h-[40px] max-h-[200px] resize-none border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-1 py-2 text-sm"
+          />
         </div>
 
         <Button
@@ -531,7 +564,3 @@ function AICoachPage() {
     </div>
   );
 }
-
-
-
-
