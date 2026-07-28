@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, Dumbbell, Apple, Users, User, ClipboardList, Search } from "lucide-react";
+import { Home, Dumbbell, Apple, Users, User, ClipboardList, Search, Wallet } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { Bot } from "lucide-react";
@@ -24,7 +24,7 @@ const trainerItems = [
   { to: "/trainer-plans", label: "خططي", icon: ClipboardList },
   { to: "/search", label: "بحث", icon: Search },
   { to: "/chat", label: "الرسائل", icon: Users },
- 
+ { to: "/billing", label: "الاشتراكات", icon: Wallet },
   { to: "/profile", label: "ملفي", icon: User },
 ] as const;
 

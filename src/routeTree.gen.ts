@@ -23,6 +23,7 @@ import { Route as AuthenticatedAppProfileRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppNutritionRouteImport } from './routes/_authenticated/_app.nutrition'
 import { Route as AuthenticatedAppHomeRouteImport } from './routes/_authenticated/_app.home'
 import { Route as AuthenticatedAppChatRouteImport } from './routes/_authenticated/_app.chat'
+import { Route as AuthenticatedAppBillingRouteImport } from './routes/_authenticated/_app.billing'
 import { Route as AuthenticatedAppAiCoachRouteImport } from './routes/_authenticated/_app.ai-coach'
 import { Route as AuthenticatedAppUIdRouteImport } from './routes/_authenticated/_app.u.$id'
 import { Route as AuthenticatedAppTrainerIdRouteImport } from './routes/_authenticated/_app.trainer.$id'
@@ -100,6 +101,11 @@ const AuthenticatedAppChatRoute = AuthenticatedAppChatRouteImport.update({
   path: '/chat',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppBillingRoute = AuthenticatedAppBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
 const AuthenticatedAppAiCoachRoute = AuthenticatedAppAiCoachRouteImport.update({
   id: '/ai-coach',
   path: '/ai-coach',
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
   '/ai-coach': typeof AuthenticatedAppAiCoachRoute
+  '/billing': typeof AuthenticatedAppBillingRoute
   '/chat': typeof AuthenticatedAppChatRoute
   '/home': typeof AuthenticatedAppHomeRoute
   '/nutrition': typeof AuthenticatedAppNutritionRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/onboarding': typeof OnboardingRoute
   '/ai-coach': typeof AuthenticatedAppAiCoachRoute
+  '/billing': typeof AuthenticatedAppBillingRoute
   '/chat': typeof AuthenticatedAppChatRoute
   '/home': typeof AuthenticatedAppHomeRoute
   '/nutrition': typeof AuthenticatedAppNutritionRoute
@@ -159,6 +167,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/_authenticated/_app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/_app/ai-coach': typeof AuthenticatedAppAiCoachRoute
+  '/_authenticated/_app/billing': typeof AuthenticatedAppBillingRoute
   '/_authenticated/_app/chat': typeof AuthenticatedAppChatRoute
   '/_authenticated/_app/home': typeof AuthenticatedAppHomeRoute
   '/_authenticated/_app/nutrition': typeof AuthenticatedAppNutritionRoute
@@ -178,6 +187,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/onboarding'
     | '/ai-coach'
+    | '/billing'
     | '/chat'
     | '/home'
     | '/nutrition'
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/onboarding'
     | '/ai-coach'
+    | '/billing'
     | '/chat'
     | '/home'
     | '/nutrition'
@@ -214,6 +225,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/_authenticated/_app'
     | '/_authenticated/_app/ai-coach'
+    | '/_authenticated/_app/billing'
     | '/_authenticated/_app/chat'
     | '/_authenticated/_app/home'
     | '/_authenticated/_app/nutrition'
@@ -334,6 +346,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppChatRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/_app/billing': {
+      id: '/_authenticated/_app/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof AuthenticatedAppBillingRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/_app/ai-coach': {
       id: '/_authenticated/_app/ai-coach'
       path: '/ai-coach'
@@ -360,6 +379,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAiCoachRoute: typeof AuthenticatedAppAiCoachRoute
+  AuthenticatedAppBillingRoute: typeof AuthenticatedAppBillingRoute
   AuthenticatedAppChatRoute: typeof AuthenticatedAppChatRoute
   AuthenticatedAppHomeRoute: typeof AuthenticatedAppHomeRoute
   AuthenticatedAppNutritionRoute: typeof AuthenticatedAppNutritionRoute
@@ -375,6 +395,7 @@ interface AuthenticatedAppRouteChildren {
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAiCoachRoute: AuthenticatedAppAiCoachRoute,
+  AuthenticatedAppBillingRoute: AuthenticatedAppBillingRoute,
   AuthenticatedAppChatRoute: AuthenticatedAppChatRoute,
   AuthenticatedAppHomeRoute: AuthenticatedAppHomeRoute,
   AuthenticatedAppNutritionRoute: AuthenticatedAppNutritionRoute,
