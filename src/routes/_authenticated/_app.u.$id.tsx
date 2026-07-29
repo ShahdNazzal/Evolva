@@ -7,13 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ArrowRight, Dumbbell, ChevronDown, ChevronUp, ImageOff, X,
-  Heart, MessageCircle, MoreVertical, Send, Trash2, Play,
+  Heart, MessageCircle, Trash2, Play, Quote, Send,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-
-// ضيفي هاي الأيقونات الثلاثة على الاستيراد الموجود من lucide-react، بدل ما تعملي استيراد منفصل:
-// import { Plus, Settings as SettingsIcon, TrendingUp, Camera, ImagePlus, Calendar, ImageOff, X, Dumbbell, Moon, Flame } from "lucide-react";
 
 // نستخدم هاد المتغير بكل استعلامات الجداول الجديدة (post_likes / post_comments)
 // لأنه ملف الأنواع التلقائي تبع Supabase لسا ما تحدث فيهم
@@ -60,12 +57,7 @@ function PublicUserProfile() {
 
   const isOwnProfile = currentUser?.id === id;
 
-  // TODO: احذفي هالسطر بعد التشخيص. إذا isOwnProfile طلعت true وانتِ متأكدة إنك
-  // فاتحة بروفايل حدا تاني (مش حسابك)، معناها currentUser.id مش عم يتحدث صح
-  // (مشكلة بـ useAuth مثلاً)، أو إنك فعلياً فاتحة نفس حسابك بمتصفح تاني/تبويب تاني.
-  console.log("[debug u.$id] currentUser.id =", currentUser?.id, "| profile id (بالرابط) =", id, "| isOwnProfile =", isOwnProfile);
-
-  const loadPosts = async (profileData: any) => {
+  const loadPosts = async () => {
     setLoadingPosts(true);
     const { data: ps, error } = await supabase
       .from("posts")
@@ -75,14 +67,14 @@ function PublicUserProfile() {
 
     if (error) {
       console.error("loadPosts error:", error);
-      toast.error("تعذر تحميل المنشورات: " + error.message);
+      toast.error("تعذر تحميل المنشورات");
       setPosts([]);
       setLoadingPosts(false);
       return;
     }
 
     const rows = ps ?? [];
-    setPosts(rows.map((p: any) => ({ ...p, profiles: profileData })));
+    setPosts(rows);
 
     const postIds = rows.map((p: any) => p.id);
     if (postIds.length === 0) {
@@ -122,7 +114,7 @@ function PublicUserProfile() {
       setProfile(p);
       setWorkouts(ws ?? []);
       setIsTrainer(r?.role === "trainer");
-      await loadPosts(p);
+      await loadPosts();
     })();
   }, [id]);
 
@@ -159,76 +151,85 @@ function PublicUserProfile() {
 
   return (
     <div className="space-y-5">
-      <Button variant="ghost" onClick={() => navigate({ to: "/search" })} className="rounded-xl -mr-2">
-        <ArrowRight className="w-4 h-4 ml-1" /> رجوع
-      </Button>
+      {/* ============ رأس البروفايل الغامر ============ */}
+      <div className="relative -mx-4 sm:mx-0">
+        <div className="relative overflow-hidden sm:rounded-[2rem] gradient-blush pt-10 pb-16 px-5">
+          <div className="absolute -top-16 -left-10 w-56 h-56 bg-white/25 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -right-10 w-64 h-64 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
 
-      {/* بطاقة البروفايل */}
-      <Card className="rounded-3xl border-none shadow-soft overflow-hidden">
-        <div className="h-16 gradient-primary" />
-        <div className="p-6 pt-0 -mt-10">
-          <div className="flex items-end gap-4">
-            {profile?.avatar_url ? (
-              <img src={profile.avatar_url} className="w-24 h-24 rounded-3xl object-cover border-4 border-background shadow-soft" />
-            ) : (
-              <div className="w-24 h-24 rounded-3xl gradient-primary flex items-center justify-center text-primary-foreground text-4xl font-extrabold border-4 border-background shadow-soft">
-                {profile?.full_name?.[0]}
-              </div>
-            )}
-            <div className="pb-1">
-              <div className="font-extrabold text-xl">{profile?.full_name}</div>
-              <div className="text-xs text-primary font-semibold">عضوة</div>
+          <div className="relative flex items-center justify-between">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate({ to: "/search" })}
+              className="rounded-2xl bg-white/50 backdrop-blur hover:bg-white/70 h-9 w-9"
+            >
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-primary/80 bg-white/50 backdrop-blur px-3 py-1 rounded-full">
+              الملف الشخصي
             </div>
           </div>
-
-          {profile?.bio && <p className="text-sm mt-4 leading-relaxed text-muted-foreground">{profile.bio}</p>}
-
-          <div className="flex items-center gap-6 mt-4 pt-4 border-t">
-            <div className="text-center">
-              <div className="font-extrabold text-lg">{posts.length}</div>
-              <div className="text-[11px] text-muted-foreground">منشور</div>
-            </div>
-            <div className="text-center">
-              <div className="font-extrabold text-lg">{workouts.length}</div>
-              <div className="text-[11px] text-muted-foreground">خطة تمرين</div>
-            </div>
-          </div>
-
-          {/* زر الرسالة - يظهر بس للزوار (مش لصاحبة الحساب نفسها)
-              وبيفتح المحادثة مع هالشخص مباشرة، مش قائمة الشات كاملة */}
-          {!isOwnProfile && (
-            <div className="mt-4 pt-4 border-t">
-              <Button
-                onClick={() => {
-                  // TODO: احذفي هالسطر بعد ما تتأكدي إنه الرابط عم يتولد صح
-                  console.log("[debug u.$id] كبست رسالة، id =", id, "→ رايحين لـ /chat?with=" + id);
-                  navigate({ to: "/chat", search: { with: id } });
-                }}
-                className="w-full rounded-2xl gradient-primary"
-              >
-                <MessageCircle className="w-4 h-4 ml-1" /> رسالة
-              </Button>
-            </div>
-          )}
         </div>
-      </Card>
 
-      {/* الخطط العامة */}
+        <div className="relative -mt-14 px-5">
+          <Card className="p-5 rounded-3xl border-none shadow-elegant">
+            <div className="flex items-start gap-4">
+              <div className="-mt-10 shrink-0">
+                {profile?.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    className="w-24 h-24 rounded-3xl object-cover ring-4 ring-background shadow-elegant"
+                  />
+                ) : (
+                  <div className="w-24 h-24 rounded-3xl gradient-primary ring-4 ring-background shadow-elegant flex items-center justify-center text-3xl font-extrabold text-primary-foreground">
+                    {profile?.full_name?.[0]}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0 pt-1">
+                <div className="font-extrabold text-xl truncate">{profile?.full_name}</div>
+                <div className="inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary text-primary mt-1">
+                  عضوة
+                </div>
+              </div>
+            </div>
+
+            {profile?.bio && <p className="text-sm mt-4 leading-relaxed text-muted-foreground">{profile.bio}</p>}
+
+            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border/60">
+              <StatPill value={posts.length} label="منشور" />
+              <StatPill value={workouts.length} label="خطة تمرين" />
+            </div>
+
+            {!isOwnProfile && (
+              <Button
+                onClick={() => navigate({ to: "/chat", search: { with: id } })}
+                className="w-full rounded-2xl gradient-primary font-bold mt-4"
+              >
+                <MessageCircle className="w-4 h-4 ml-1.5" /> رسالة
+              </Button>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      {/* ============ الخطط العامة ============ */}
       {workouts.length > 0 && (
         <div>
-          <h2 className="font-bold mb-3 pt-2">الخطط العامة</h2>
-          <div className="grid gap-2">
+          <h2 className="font-bold mb-3">الخطط العامة</h2>
+          <div className="grid gap-2.5">
             {workouts.map((w) => {
               const isOpen = openWorkoutId === w.id;
               const days = Array.isArray(w.exercises) ? w.exercises : [];
 
               return (
-                <Card key={w.id} className="rounded-2xl overflow-hidden">
+                <Card key={w.id} className="rounded-2xl overflow-hidden border-none shadow-soft">
                   <button type="button" onClick={() => toggleWorkout(w.id)} className="w-full p-4 flex items-center gap-3 text-right">
                     {w.image_url ? (
                       <img src={w.image_url} className="w-14 h-14 rounded-xl object-cover" />
                     ) : (
-                      <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center"><Dumbbell className="w-5 h-5 text-muted-foreground" /></div>
+                      <div className="w-14 h-14 rounded-xl bg-secondary text-primary flex items-center justify-center"><Dumbbell className="w-5 h-5" /></div>
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="font-bold truncate">{w.name}</div>
@@ -246,7 +247,7 @@ function PublicUserProfile() {
                         transition={{ duration: 0.25 }}
                         className="overflow-hidden"
                       >
-                        <div className="px-4 pb-4 space-y-4 border-t pt-3">
+                        <div className="px-4 pb-4 space-y-4 border-t border-border/60 pt-3">
                           {w.description && <p className="text-sm text-muted-foreground">{w.description}</p>}
                           {days.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">لا توجد تفاصيل تمارين</p>}
                           {days.map((d: any, dayIdx: number) => (
@@ -276,79 +277,34 @@ function PublicUserProfile() {
         </div>
       )}
 
-      {/* المنشورات - فيد على طريقة انستقرام */}
-      <div className="space-y-4">
-        <h2 className="font-bold">المنشورات</h2>
+      {/* ============ المنشورات — بلاطات بنفس مبدأ صفحة "ملفي" ============ */}
+      <div>
+        <h2 className="font-bold mb-3">المنشورات</h2>
 
         {loadingPosts && <p className="text-xs text-muted-foreground text-center py-4">جاري التحميل...</p>}
 
         {!loadingPosts && posts.length === 0 && (
-          <Card className="p-8 text-center rounded-3xl border-dashed">
+          <Card className="p-8 text-center rounded-3xl border-none shadow-soft">
             <ImageOff className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
             <p className="text-sm text-muted-foreground">لا توجد منشورات بعد</p>
           </Card>
         )}
 
-        {posts.map((post, i) => {
-          const meta = postsMeta[post.id] ?? { likesCount: 0, likedByMe: false, commentsCount: 0 };
-          return (
-            <motion.div key={post.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
-              <Card className="rounded-2xl overflow-hidden border-none shadow-soft p-2">
-                <div className="flex items-center gap-2.5 p-3">
-                  {profile?.avatar_url ? (
-                    <img src={profile.avatar_url} className="w-9 h-9 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-primary-foreground text-sm font-bold">
-                      {profile?.full_name?.[0]}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold truncate">{profile?.full_name}</div>
-                    <div className="text-[10px] text-muted-foreground">{new Date(post.created_at).toLocaleDateString("ar")}</div>
-                  </div>
-                  {isOwnProfile && (
-                    <button onClick={() => deletePost(post)} className="p-1.5 text-muted-foreground hover:text-destructive">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-
-                {post.image_url && (
-                  <button type="button" onClick={() => setOpenPost(post)} className="block w-full">
-                    <img src={post.image_url} className="w-full aspect-square object-cover" />
-                  </button>
-                )}
-
-                <div className="flex items-center gap-4 px-3 pt-2.5">
-                  <button onClick={() => toggleLike(post)} className="flex items-center gap-1.5">
-                    <Heart className={`w-6 h-6 transition ${meta.likedByMe ? "fill-primary text-primary" : "text-foreground"}`} />
-                  </button>
-                  <button onClick={() => setCommentsPostId(post.id)} className="flex items-center gap-1.5">
-                    <MessageCircle className="w-6 h-6" />
-                  </button>
-                </div>
-
-                <div className="px-3 pt-1.5 flex items-center gap-3 text-xs font-semibold">
-                  <span>{meta.likesCount} إعجاب</span>
-                  <button onClick={() => setCommentsPostId(post.id)} className="text-muted-foreground">
-                    عرض التعليقات ({meta.commentsCount})
-                  </button>
-                </div>
-
-                {post.content && (
-                  <div className="px-3 pt-1.5 pb-3 text-sm leading-relaxed">
-                    <span className="font-bold ml-1">{profile?.full_name}</span>
-                    {post.content}
-                  </div>
-                )}
-                {!post.content && <div className="pb-2" />}
-              </Card>
-            </motion.div>
-          );
-        })}
+        {!loadingPosts && posts.length > 0 && (
+          <div className="grid grid-cols-2 gap-3">
+            {posts.map((post) => (
+              <PostTile
+                key={post.id}
+                post={post}
+                meta={postsMeta[post.id] ?? { likesCount: 0, likedByMe: false, commentsCount: 0 }}
+                onOpen={() => setOpenPost(post)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* لايتبوكس بسيط لعرض صورة المنشور موسّعة */}
+      {/* لايتبوكس المنشور — عرض موسّع + لايك + فتح التعليقات */}
       <AnimatePresence>
         {openPost && (
           <motion.div
@@ -356,26 +312,60 @@ function PublicUserProfile() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setOpenPost(null)}
-            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-background rounded-3xl overflow-hidden max-w-sm w-full max-h-[85vh] overflow-y-auto"
+              className="bg-background rounded-3xl overflow-hidden max-w-sm w-full max-h-[85vh] overflow-y-auto shadow-elegant"
             >
-              <div className="relative">
-                <img src={openPost.image_url} className="w-full aspect-square object-cover" />
-                <button
-                  onClick={() => setOpenPost(null)}
-                  className="absolute top-3 left-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center"
-                >
-                  <X className="w-4 h-4 text-white" />
+              {openPost.image_url ? (
+                <div className="relative">
+                  <img src={openPost.image_url} className="w-full aspect-square object-cover" />
+                  <button
+                    onClick={() => setOpenPost(null)}
+                    className="absolute top-3 left-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative gradient-primary text-primary-foreground p-8 min-h-[220px] flex items-center">
+                  <Quote className="w-8 h-8 opacity-40 absolute top-5 right-5" />
+                  <button
+                    onClick={() => setOpenPost(null)}
+                    className="absolute top-3 left-3 w-8 h-8 rounded-full bg-black/20 flex items-center justify-center"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                  <p className="text-base font-bold leading-relaxed relative">{openPost.content}</p>
+                </div>
+              )}
+
+              {openPost.image_url && openPost.content && (
+                <div className="p-4 text-sm leading-relaxed">{openPost.content}</div>
+              )}
+
+              <div className="flex items-center justify-between px-4 py-3 border-t border-border/60">
+                <button onClick={() => toggleLike(openPost)} className="flex items-center gap-1.5 text-sm font-bold">
+                  <Heart className={`w-5 h-5 ${postsMeta[openPost.id]?.likedByMe ? "fill-primary text-primary" : ""}`} />
+                  {postsMeta[openPost.id]?.likesCount ?? 0}
                 </button>
+                <button onClick={() => setCommentsPostId(openPost.id)} className="flex items-center gap-1.5 text-sm font-bold text-muted-foreground">
+                  <MessageCircle className="w-5 h-5" /> {postsMeta[openPost.id]?.commentsCount ?? 0} تعليق
+                </button>
+                {isOwnProfile && (
+                  <button onClick={() => { deletePost(openPost); setOpenPost(null); }} className="text-destructive">
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
               </div>
-              {openPost.content && <div className="p-4 text-sm leading-relaxed">{openPost.content}</div>}
-              <div className="px-4 pb-4 text-[10px] text-muted-foreground">{new Date(openPost.created_at).toLocaleDateString("ar")}</div>
+
+              <div className="px-4 pb-4 pt-1 text-[10px] text-muted-foreground">
+                {new Date(openPost.created_at).toLocaleDateString("ar", { day: "numeric", month: "long", year: "numeric" })}
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -393,6 +383,62 @@ function PublicUserProfile() {
         }
       />
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* عنصر إحصائية صغيرة برأس البروفايل                                    */
+/* ------------------------------------------------------------------ */
+
+function StatPill({ value, label }: { value: string | number; label: string }) {
+  return (
+    <div className="text-center px-3 py-1.5 rounded-xl bg-muted/60">
+      <div className="font-extrabold text-sm leading-none">{value}</div>
+      <div className="text-[9px] text-muted-foreground mt-1">{label}</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* بلاطة منشور — نفس مبدأ التصميم المستخدم بصفحة "ملفي" و"بروفايل المدربة" */
+/* ------------------------------------------------------------------ */
+
+function PostTile({ post, meta, onOpen }: { post: any; meta: PostMeta; onOpen: () => void }) {
+  const hasImage = !!post.image_url;
+
+  if (hasImage) {
+    return (
+      <motion.button
+        whileTap={{ scale: 0.96 }}
+        onClick={onOpen}
+        className="relative aspect-[4/5] rounded-2xl overflow-hidden text-right group"
+      >
+        <img src={post.image_url} className="w-full h-full object-cover transition group-hover:scale-105" />
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/75 to-transparent" />
+        <div className="absolute inset-x-2.5 bottom-2 text-white space-y-1">
+          {post.content && <p className="text-[11px] font-semibold leading-tight line-clamp-2">{post.content}</p>}
+          <div className="flex items-center gap-3 text-[10px] font-bold">
+            <span className="flex items-center gap-1"><Heart className={`w-3 h-3 ${meta.likedByMe ? "fill-white" : ""}`} /> {meta.likesCount}</span>
+            <span className="flex items-center gap-1"><MessageCircle className="w-3 h-3" /> {meta.commentsCount}</span>
+          </div>
+        </div>
+      </motion.button>
+    );
+  }
+
+  return (
+    <motion.button
+      whileTap={{ scale: 0.96 }}
+      onClick={onOpen}
+      className="relative aspect-[4/5] rounded-2xl overflow-hidden text-right p-3.5 flex flex-col justify-between gradient-blush border border-white/40"
+    >
+      <Quote className="w-5 h-5 text-primary/50 shrink-0" />
+      <p className="text-[12.5px] font-bold leading-snug line-clamp-5 text-foreground/90">{post.content}</p>
+      <div className="flex items-center gap-3 text-[10px] font-bold text-muted-foreground">
+        <span className="flex items-center gap-1"><Heart className={`w-3 h-3 ${meta.likedByMe ? "fill-primary text-primary" : ""}`} /> {meta.likesCount}</span>
+        <span className="flex items-center gap-1"><MessageCircle className="w-3 h-3" /> {meta.commentsCount}</span>
+      </div>
+    </motion.button>
   );
 }
 
@@ -501,7 +547,7 @@ function CommentsDialog({ postId, open, onClose, currentUserId, postAuthorId, on
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="rounded-3xl max-h-[85vh] overflow-hidden flex flex-col p-0">
+      <DialogContent className="rounded-3xl max-h-[85vh] overflow-hidden flex flex-col p-0" dir="rtl">
         <DialogHeader className="p-4 pb-2 border-b">
           <DialogTitle>التعليقات</DialogTitle>
         </DialogHeader>

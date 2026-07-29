@@ -10,7 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Dumbbell, Apple, Plus, X, Trash2, Pencil, ImagePlus, Youtube, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { GOAL_LABELS, type Goal } from "@/lib/workout-rules";
+import {
+  GOAL_LABELS,
+  ACTIVITY_LABELS,
+  EQUIPMENT_LABELS,
+  type Goal,
+  type ActivityLevel,
+  type Equipment,
+} from "@/lib/workout-rules";
 import { uploadFile } from "@/lib/upload";
 
 export const Route = createFileRoute("/_authenticated/_app/trainer-plans")({
@@ -119,6 +126,24 @@ function TrainerPlansPage() {
                       <div className="text-xs text-muted-foreground mt-1">
                         {daysCount} يوم تمرين • من {w.min_frequency} أيام/أسبوع
                       </div>
+                      {/* نعرض تصنيف الخطة (الهدف/مستوى النشاط/المعدات) عشان يكون واضح للمدربة شو مسجّل فعلياً عن خطتها */}
+                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                        {w.goal && (
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-secondary text-primary">
+                            {GOAL_LABELS[w.goal as Goal] ?? w.goal}
+                          </span>
+                        )}
+                        {w.activity_level && (
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                            {ACTIVITY_LABELS[w.activity_level as ActivityLevel] ?? w.activity_level}
+                          </span>
+                        )}
+                        {w.equipment && (
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                            {EQUIPMENT_LABELS[w.equipment as Equipment] ?? w.equipment}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -200,6 +225,12 @@ function TrainerPlansPage() {
 /* ==================================================================== */
 /* خطة تمرين للمدربة — بنفس البنية بالضبط تبع خطط المستخدمة الشخصية        */
 /* (أسبوع ثابت 7 أيام: day_of_week + is_rest + muscle_group + فيديو/شرح/نصيحة لكل تمرين) */
+/*                                                                        */
+/* مهم جداً: هلق المدربة هي يلي بتحدد فعلياً goal / activity_level /       */
+/* equipment لخطتها (بدل ما كانت هاي القيم ثابتة دايماً على fitness/       */
+/* moderate/gym بغض النظر عن محتوى الخطة). هيك matchWorkoutPlan يلي        */
+/* بيشتغل وقت الـ onboarding وصفحة الإعدادات فعلياً بيقدر يميّز بين خطط     */
+/* التنحيف والتضخيم والشد... إلخ، ويطابق كل مستخدمة مع الخطة الأنسب إلها.   */
 /* ==================================================================== */
 
 type NewPlanExercise = { name: string; sets: number; reps: number; video_url: string; instruction: string; tips: string };
@@ -220,6 +251,11 @@ function NewWorkoutDialog({ open, onClose, trainerId, onSaved, editPlan }: any) 
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
   const [days, setDays] = useState<NewPlanDay[]>(defaultDays());
   const [saving, setSaving] = useState(false);
+
+  // تصنيف الخطة الفعلي — هاد يلي كان مفقود قبل، وهو أساس المطابقة الصحيحة مع المستخدمات
+  const [goal, setGoal] = useState<Goal>("fitness");
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel>("moderate");
+  const [equipment, setEquipment] = useState<Equipment>("gym");
 
   // نفس مبدأ السحب والإفلات المستخدم بخطط المستخدمة الشخصية، مبني على Pointer Events عشان يشتغل بالموبايل واللابتوب معاً
   const [dragInfo, setDragInfo] = useState<{ dayIdx: number; exIdx: number } | null>(null);
@@ -244,6 +280,9 @@ function NewWorkoutDialog({ open, onClose, trainerId, onSaved, editPlan }: any) 
       setDescription(ep.description || "");
       setImageFile(null);
       setExistingImageUrl(ep.image_url || null);
+      setGoal((ep.goal as Goal) || "fitness");
+      setActivityLevel((ep.activity_level as ActivityLevel) || "moderate");
+      setEquipment((ep.equipment as Equipment) || "gym");
 
       const raw: any[] = Array.isArray(ep.exercises) ? [...ep.exercises] : [];
 
@@ -295,6 +334,9 @@ function NewWorkoutDialog({ open, onClose, trainerId, onSaved, editPlan }: any) 
       setDescription("");
       setImageFile(null);
       setExistingImageUrl(null);
+      setGoal("fitness");
+      setActivityLevel("moderate");
+      setEquipment("gym");
       setDays(defaultDays());
     }
   }, [open]);
@@ -382,9 +424,11 @@ function NewWorkoutDialog({ open, onClose, trainerId, onSaved, editPlan }: any) 
       const payload = {
         name,
         description: description || null,
-        goal: "fitness" as const,
-        activity_level: "moderate" as const,
-        equipment: "gym" as const,
+        // هلق هاي القيم فعلياً مأخوذة من اختيار المدربة، مش ثابتة، عشان تنعكس صح
+        // بعملية المطابقة (matchWorkoutPlan) مع أهداف ومعدات كل مستخدمة
+        goal,
+        activity_level: activityLevel,
+        equipment,
         min_frequency: cleanedDays.filter((d) => !d.is_rest).length,
         exercises: cleanedDays,
         is_public: true,
@@ -438,6 +482,49 @@ function NewWorkoutDialog({ open, onClose, trainerId, onSaved, editPlan }: any) 
             <Label className="text-xs flex items-center gap-2"><ImagePlus className="w-4 h-4" /> صورة للخطة (اختياري)</Label>
             <Input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] ?? null)} className="rounded-xl mt-1" />
           </div>
+
+          {/* تصنيف الخطة — هاد يلي بيحدد لأي مستخدمات رح تظهرلها هاي الخطة كأنسب خطة إلها */}
+          <Card className="p-3 rounded-2xl bg-secondary/40 border-none space-y-3">
+            <div className="text-xs font-bold text-primary">لمين هاي الخطة الأنسب؟</div>
+            <div className="grid grid-cols-1 gap-2.5">
+              <div>
+                <Label className="text-[11px]">الهدف الأساسي للخطة</Label>
+                <select
+                  value={goal}
+                  onChange={(e) => setGoal(e.target.value as Goal)}
+                  className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-2 text-sm"
+                >
+                  {(Object.keys(GOAL_LABELS) as Goal[]).map((g) => (
+                    <option key={g} value={g}>{GOAL_LABELS[g]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-[11px]">مستوى النشاط المناسب لهاي الخطة</Label>
+                <select
+                  value={activityLevel}
+                  onChange={(e) => setActivityLevel(e.target.value as ActivityLevel)}
+                  className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-2 text-sm"
+                >
+                  {(Object.keys(ACTIVITY_LABELS) as ActivityLevel[]).map((a) => (
+                    <option key={a} value={a}>{ACTIVITY_LABELS[a]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-[11px]">المعدات المطلوبة لهاي الخطة</Label>
+                <select
+                  value={equipment}
+                  onChange={(e) => setEquipment(e.target.value as Equipment)}
+                  className="w-full mt-1 h-10 rounded-xl border border-input bg-background px-2 text-sm"
+                >
+                  {(Object.keys(EQUIPMENT_LABELS) as Equipment[]).map((eq) => (
+                    <option key={eq} value={eq}>{EQUIPMENT_LABELS[eq]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </Card>
 
           <div className="space-y-3">
             <Label>أيام الأسبوع</Label>
