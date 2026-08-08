@@ -1,3 +1,5 @@
+//C:\Users\lenovo\Downloads\jammawia-main (1)\jammawia-main\src\routes\_authenticated\_app.trainer-plans.tsx
+
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -68,9 +70,9 @@ function TrainerPlansPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold">خططي</h1>
+    <div className="space-y-5 w-full max-w-full overflow-x-hidden">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-extrabold truncate">خططي</h1>
         <Button
           onClick={() => {
             if (tab === "workout") {
@@ -80,7 +82,7 @@ function TrainerPlansPage() {
               setOpenN(true);
             }
           }}
-          className="rounded-xl gradient-primary"
+          className="rounded-xl gradient-primary shrink-0"
         >
           <Plus className="w-4 h-4 ml-1" /> خطة جديدة
         </Button>
@@ -98,7 +100,7 @@ function TrainerPlansPage() {
       {loadingData && <Skeleton className="h-40 rounded-3xl" />}
 
       {!loadingData && tab === "workout" && (
-        <div className="grid gap-2">
+        <div className="grid gap-2 w-full max-w-full">
           {workouts.length === 0 && (
             <Card className="p-6 text-center rounded-2xl border-dashed">
               <Dumbbell className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
@@ -113,7 +115,7 @@ function TrainerPlansPage() {
                 : w.exercises.length
               : 0;
             return (
-              <Card key={w.id} className="p-4 rounded-2xl">
+              <Card key={w.id} className="p-4 rounded-2xl w-full max-w-full overflow-hidden">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex items-center gap-3">
                     {w.image_url ? (
@@ -123,7 +125,7 @@ function TrainerPlansPage() {
                     )}
                     <div className="min-w-0">
                       <div className="font-bold truncate">{w.name}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
+                      <div className="text-xs text-muted-foreground mt-1 truncate">
                         {daysCount} يوم تمرين • من {w.min_frequency} أيام/أسبوع
                       </div>
                       {/* نعرض تصنيف الخطة (الهدف/مستوى النشاط/المعدات) عشان يكون واضح للمدربة شو مسجّل فعلياً عن خطتها */}
@@ -174,7 +176,7 @@ function TrainerPlansPage() {
       )}
 
       {!loadingData && tab === "nutrition" && (
-        <div className="grid gap-2">
+        <div className="grid gap-2 w-full max-w-full">
           {nutrition.length === 0 && (
             <Card className="p-6 text-center rounded-2xl border-dashed">
               <Apple className="w-10 h-10 mx-auto text-muted-foreground mb-2" />
@@ -182,14 +184,14 @@ function TrainerPlansPage() {
             </Card>
           )}
           {nutrition.map((p) => (
-            <Card key={p.id} className="p-4 rounded-2xl">
+            <Card key={p.id} className="p-4 rounded-2xl w-full max-w-full overflow-hidden">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="font-bold">{p.name}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="font-bold truncate">{p.name}</div>
+                  <div className="text-xs text-muted-foreground mt-1 truncate">
                     {GOAL_LABELS[p.goal as Goal]} • {p.min_calories}–{p.max_calories} سعرة
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-xs text-muted-foreground mt-1 truncate">
                     {(Array.isArray(p.meals) ? p.meals : []).length} وجبات
                   </div>
                 </div>
@@ -200,7 +202,7 @@ function TrainerPlansPage() {
                     toast.success("تم الحذف");
                     load();
                   }}
-                  className="p-2 text-destructive"
+                  className="p-2 text-destructive shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -456,11 +458,11 @@ function NewWorkoutDialog({ open, onClose, trainerId, onSaved, editPlan }: any) 
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="rounded-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="rounded-3xl max-h-[90vh] overflow-y-auto w-[92vw] max-w-md sm:max-w-lg p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{editRef.current ? "تعديل خطة التمرين" : "خطة تمرين جديدة"}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-3 w-full max-w-full overflow-x-hidden">
           {editRef.current && existingImageUrl && !imageFile && (
             <div className="relative rounded-xl overflow-hidden">
               <img src={existingImageUrl} className="w-full h-32 object-cover" />
@@ -529,9 +531,9 @@ function NewWorkoutDialog({ open, onClose, trainerId, onSaved, editPlan }: any) 
           <div className="space-y-3">
             <Label>أيام الأسبوع</Label>
             {days.map((d, di) => (
-              <Card key={di} className="p-3 rounded-2xl">
+              <Card key={di} className="p-3 rounded-2xl w-full max-w-full overflow-hidden">
                 <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                  <div className="font-bold text-sm">
+                  <div className="font-bold text-sm min-w-0 truncate">
                     {DAYS[d.day_of_week]}
                     {!d.is_rest && d.muscle_group?.trim() && (
                       <span className="text-primary"> - {d.muscle_group.trim()}</span>
@@ -573,7 +575,7 @@ function NewWorkoutDialog({ open, onClose, trainerId, onSaved, editPlan }: any) 
                         <div
                           key={ei}
                           ref={registerItemRef(di, ei)}
-                          className={`rounded-xl border p-2 space-y-2 bg-background transition-colors ${
+                          className={`rounded-xl border p-2 space-y-2 bg-background transition-colors w-full max-w-full overflow-hidden ${
                             isDragging ? "opacity-40" : ""
                           } ${isDragOverTarget ? "border-primary ring-2 ring-primary/30" : "border-border"}`}
                         >
@@ -611,7 +613,7 @@ function NewWorkoutDialog({ open, onClose, trainerId, onSaved, editPlan }: any) 
                               value={ex.name}
                               onChange={(e) => updateExercise(di, ei, { name: e.target.value })}
                               placeholder="اسم التمرين"
-                              className="rounded-xl h-9 flex-1"
+                              className="rounded-xl h-9 flex-1 min-w-0"
                             />
                             <button
                               onClick={() => updateDay(di, { items: d.items.filter((_, j) => j !== ei) })}
@@ -647,7 +649,7 @@ function NewWorkoutDialog({ open, onClose, trainerId, onSaved, editPlan }: any) 
                               value={ex.video_url}
                               onChange={(e) => updateExercise(di, ei, { video_url: e.target.value })}
                               placeholder="رابط فيديو يوتيوب (اختياري)"
-                              className="rounded-xl h-8 text-xs"
+                              className="rounded-xl h-8 text-xs min-w-0"
                             />
                           </div>
                           <Input
@@ -704,9 +706,9 @@ function NewNutritionDialog({ open, onClose, trainerId, onSaved }: any) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="rounded-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="rounded-3xl max-h-[90vh] overflow-y-auto w-[92vw] max-w-md sm:max-w-lg p-4 sm:p-6">
         <DialogHeader><DialogTitle>خطة تغذية جديدة</DialogTitle></DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-3 w-full max-w-full overflow-x-hidden">
           <div>
             <Label>اسم الخطة</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} className="rounded-xl mt-1" />
@@ -735,11 +737,11 @@ function NewNutritionDialog({ open, onClose, trainerId, onSaved }: any) {
           <div className="space-y-2">
             <Label>الوجبات</Label>
             {meals.map((m, i) => (
-              <div key={i} className="grid grid-cols-[80px_1fr_70px_auto] gap-2 items-center">
-                <Input value={m.meal} onChange={(e) => { const c = [...meals]; c[i].meal = e.target.value; setMeals(c); }} className="rounded-xl h-9" placeholder="نوع" />
-                <Input value={m.name} onChange={(e) => { const c = [...meals]; c[i].name = e.target.value; setMeals(c); }} className="rounded-xl h-9" placeholder="الوجبة" />
-                <Input type="number" value={m.calories} onChange={(e) => { const c = [...meals]; c[i].calories = +e.target.value; setMeals(c); }} className="rounded-xl h-9 text-center" />
-                <button onClick={() => setMeals(meals.filter((_, j) => j !== i))}><X className="w-4 h-4" /></button>
+              <div key={i} className="grid grid-cols-[60px_1fr_56px_auto] gap-1.5 items-center">
+                <Input value={m.meal} onChange={(e) => { const c = [...meals]; c[i].meal = e.target.value; setMeals(c); }} className="rounded-xl h-9 min-w-0 px-1.5 text-xs" placeholder="نوع" />
+                <Input value={m.name} onChange={(e) => { const c = [...meals]; c[i].name = e.target.value; setMeals(c); }} className="rounded-xl h-9 min-w-0" placeholder="الوجبة" />
+                <Input type="number" value={m.calories} onChange={(e) => { const c = [...meals]; c[i].calories = +e.target.value; setMeals(c); }} className="rounded-xl h-9 min-w-0 text-center px-1" />
+                <button onClick={() => setMeals(meals.filter((_, j) => j !== i))} className="shrink-0"><X className="w-4 h-4" /></button>
               </div>
             ))}
             <Button size="sm" variant="outline" onClick={() => setMeals([...meals, { meal: "سناك", name: "", calories: 0 }])} className="rounded-xl w-full">

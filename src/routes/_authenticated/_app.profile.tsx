@@ -28,6 +28,7 @@ import {
   History,
   Pencil,
   Trash2,
+  Instagram,
 } from "lucide-react";
 import { toast } from "sonner";
 import { GOAL_LABELS } from "@/lib/workout-rules";
@@ -252,8 +253,8 @@ function ProfilePage() {
 
             {profile?.bio && <p className="text-sm mt-4 leading-relaxed text-muted-foreground">{profile.bio}</p>}
 
-            {/* شريط الإحصائيات */}
-            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border/60">
+            {/* شريط الإحصائيات — flex-wrap عشان ينضبط بشاشات الموبايل الضيقة جداً بدون ضغط أو تجاوز للعرض */}
+            <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border/60">
               <StatPill value={posts.length} label="منشور" />
               {!isTrainer && <StatPill value={scheduledDaysCount} label="أيام مجدولة" />}
               {!isTrainer && fp && <StatPill value={`${fp.weight}`} label="كغم حالياً" />}
@@ -447,6 +448,17 @@ function ProfilePage() {
       >
         تسجيل الخروج
       </Button>
+
+      {/* ============ تواصلي معنا — ملاحظات عن الموقع/التطبيق عبر انستقرام (آخر عنصر بالصفحة) ============ */}
+      <a
+        href="https://www.instagram.com/shahd.nazzal_/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition py-2"
+      >
+        <Instagram className="w-3.5 h-3.5" />
+        عندك ملاحظة؟ تواصلي معنا على انستقرام
+      </a>
 
       <AddWeightDialog
         open={addOpen || !!editingLog}
@@ -655,7 +667,7 @@ function AddWeightDialog({ open, onClose, userId, fp, editingLog, onSaved }: any
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="rounded-3xl" dir="rtl">
+      <DialogContent className="rounded-3xl w-[92vw] max-w-md" dir="rtl">
         <DialogHeader><DialogTitle>{isEditing ? "تعديل الوزن" : "تسجيل وزن جديد"}</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -703,7 +715,7 @@ function WeightHistoryDialog({ open, onClose, logs, onEdit, userId, fp, onSaved 
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="rounded-3xl max-h-[75vh] overflow-y-auto" dir="rtl">
+      <DialogContent className="rounded-3xl max-h-[75vh] overflow-y-auto w-[92vw] max-w-md" dir="rtl">
         <DialogHeader><DialogTitle>سجل الوزن</DialogTitle></DialogHeader>
         {sorted.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-8">ما في سجلات وزن بعد</p>
@@ -745,7 +757,7 @@ function NewPostDialog({ open, onClose, userId, onSaved }: any) {
   const [saving, setSaving] = useState(false);
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="rounded-3xl" dir="rtl">
+      <DialogContent className="rounded-3xl w-[92vw] max-w-md" dir="rtl">
         <DialogHeader><DialogTitle>منشور جديد</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <Textarea value={content} onChange={(e) => setContent(e.target.value)} className="rounded-xl min-h-24" placeholder="اكتبي كابشن..." />
