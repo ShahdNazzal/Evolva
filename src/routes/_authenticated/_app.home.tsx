@@ -101,6 +101,7 @@ function HomePage() {
   useEffect(() => {
     if (!user) return;
     (async () => {
+     try {
       const now = new Date();
       const weekStart = new Date(now);
       weekStart.setHours(0, 0, 0, 0);
@@ -141,9 +142,36 @@ function HomePage() {
         setWeeklyDaysTrained(daysThisWeek);
       }
 
+      // الخطة النشطة (تمرين) وخطة التغذية — كانوا عم يتجابوا بالتسلسل (كل استعلام ينتظر
+      // اللي قبله)، وهاد بالذات يلي كان يبطّئ ظهور الصفحة للمستخدمة الجديدة (يلي عندها
+      // fp من الـ onboarding بس لسا ما عندها active_plan_selection كامل، فكانت تضرب
+      // سلسلة استعلامين متتاليين إضافيين بس عشان توصل لـ null). هلق الاثنين (تمرين + تغذية)
+      // منجيبهم بالتوازي مع بعض (Promise.all)، ودمجنا جولتي التغذية (خطة خاصة ثم خطة عامة)
+      // بجولة واحدة بدل اثنتين متتاليتين.
+
+      const workoutPromise = sel?.workout_plan_id
+        ? supabase.from("workouts").select("*").eq("id", sel.workout_plan_id).maybeSingle()
+        : Promise.resolve({ data: null } as any);
+
+      let nutritionPromise: PromiseLike<any>;
+      if (sel?.nutrition_plan_id) {
+        nutritionPromise = supabase.from("nutrition_plans").select("*").eq("id", sel.nutrition_plan_id).maybeSingle();
+      } else if (f) {
+        // استعلام واحد بيرجع خطتها الخاصة (owner_user_id) وأحدث خطة عامة مناسبة لهدفها معاً،
+        // وبعدين منفضّل الخاصة إذا موجودة أثناء معالجة النتيجة بالـ JS بدل استعلامين متتاليين
+        nutritionPromise = supabase
+          .from("nutrition_plans")
+          .select("*")
+          .or(`owner_user_id.eq.${user.id},and(is_public.eq.true,goal.eq.${f.goal})`)
+          .order("created_at", { ascending: false });
+      } else {
+        nutritionPromise = Promise.resolve({ data: null } as any);
+      }
+
+      const [{ data: w }, nutritionResult] = await Promise.all([workoutPromise, nutritionPromise]);
+
       // الخطة النشطة: نفس منطق صفحة التمارين بالضبط (workout_plan_type + workout_plan_id)
       if (sel?.workout_plan_id) {
-        const { data: w } = await supabase.from("workouts").select("*").eq("id", sel.workout_plan_id).maybeSingle();
         setActiveWorkout(w ?? null);
         setActiveWorkoutSource(w ? { type: sel.workout_plan_type, id: sel.workout_plan_id } : null);
       } else {
@@ -151,29 +179,24 @@ function HomePage() {
         setActiveWorkoutSource(null);
       }
 
-      // خطة التغذية: نفضّل الخطة المعتمدة صراحة (نفس اختيار active_plan_selection)، وإلا خطة خاصة، وإلا أقرب خطة عامة لهدفها
+      // خطة التغذية: نفضّل الخطة المعتمدة صراحة، وإلا خطة خاصة، وإلا أقرب خطة عامة لهدفها
       if (sel?.nutrition_plan_id) {
-        const { data: np } = await supabase.from("nutrition_plans").select("*").eq("id", sel.nutrition_plan_id).maybeSingle();
-        setNutritionPlan(np ?? null);
+        setNutritionPlan(nutritionResult?.data ?? null);
       } else if (f) {
-        const { data: myPlan } = await supabase.from("nutrition_plans").select("*").eq("owner_user_id", user.id).maybeSingle();
-        if (myPlan) {
-          setNutritionPlan(myPlan);
-        } else {
-          const { data: pubPlan } = await supabase
-            .from("nutrition_plans")
-            .select("*")
-            .eq("goal", f.goal)
-            .eq("is_public", true)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          setNutritionPlan(pubPlan ?? null);
-        }
+        const rows: any[] = nutritionResult?.data ?? [];
+        const myPlan = rows.find((r) => r.owner_user_id === user.id);
+        setNutritionPlan(myPlan ?? rows[0] ?? null);
+      } else {
+        setNutritionPlan(null);
       }
 
-      setLoading(false);
-      await loadUnread(user.id);
+     } catch (err) {
+       // أي خطأ صار بأي استعلام فوق (RLS، شبكة، إلخ) رح يبين هون بالتفصيل بدل ما الصفحة تعلق عالتحميل للأبد
+       console.error("home page load error:", err);
+     } finally {
+       setLoading(false);
+       loadUnread(user.id);
+     }
     })();
   }, [user]);
 
@@ -227,58 +250,77 @@ function HomePage() {
         <h1 className="text-3xl font-extrabold mt-1">{profile?.full_name ?? "أهلاً"}</h1>
       </motion.div>
 
-      {role === "user" && (
+      {loading ? (
+        <PreparingDataScreen />
+      ) : (
         <>
-          {loading ? (
-            <Skeleton className="h-56 w-full rounded-3xl" />
-          ) : (
-            <TodayWorkoutHero activeWorkout={activeWorkout} />
-          )}
+          {role === "user" && (
+            <>
+              <TodayWorkoutHero activeWorkout={activeWorkout} />
 
-          <div className="grid grid-cols-2 gap-3">
-            {loading ? (
-              <>
-                <Skeleton className="h-40 rounded-2xl" />
-                <Skeleton className="h-40 rounded-2xl" />
-              </>
-            ) : (
-              <>
+              <div className="grid grid-cols-2 gap-3">
                 <WeeklyProgressCard completed={weeklyDaysTrained} goal={weeklyGoal} streak={streak} />
                 <BodyStatsCard fp={fp} weightLogs={weightLogs} />
-              </>
-            )}
-          </div>
+              </div>
 
-          {/* تقويم التقدّم: بيعرض جدولك الأسبوعي متكرر على كل أيام الشهر، ولما تخلّصي تمارين يوم معيّن بينشطب تلقائياً */}
-          {loading ? (
-            <Skeleton className="h-72 rounded-3xl" />
-          ) : activeWorkout && activeWorkoutSource && isFixedWeekPlan(activeWorkout) ? (
-            <WorkoutCalendarCard
-              activeWorkout={activeWorkout}
-              userId={user!.id}
-              sourceType={activeWorkoutSource.type}
-              sourceId={activeWorkoutSource.id}
-            />
-          ) : (
-            <Card className="p-4 rounded-2xl border-dashed text-center text-xs text-muted-foreground">
-              اعتمدي خطة بجدول أسبوعي ثابت (من صفحة التمارين) عشان يظهر هون تقويم تقدمك اليومي
-            </Card>
+              {/* تقويم التقدّم: بيعرض جدولك الأسبوعي متكرر على كل أيام الشهر، ولما تخلّصي تمارين يوم معيّن بينشطب تلقائياً */}
+              {activeWorkout && activeWorkoutSource && isFixedWeekPlan(activeWorkout) ? (
+                <WorkoutCalendarCard
+                  activeWorkout={activeWorkout}
+                  userId={user!.id}
+                  sourceType={activeWorkoutSource.type}
+                  sourceId={activeWorkoutSource.id}
+                />
+              ) : (
+                <Card className="p-4 rounded-2xl border-dashed text-center text-xs text-muted-foreground">
+                  اعتمدي خطة بجدول أسبوعي ثابت (من صفحة التمارين) عشان يظهر هون تقويم تقدمك اليومي
+                </Card>
+              )}
+
+              <NutritionSnippetCard plan={nutritionPlan} fp={fp} />
+
+              <div className="grid grid-cols-2 gap-3">
+                <QuickAction to="/trainers" icon={<Users className="w-5 h-5" />} title="اكتشفي مدربات" />
+                <QuickAction to="/chat" icon={<MessageCircle className="w-5 h-5" />} title="الشات" badge={unreadCount} />
+              </div>
+            </>
           )}
 
-          {!loading && <NutritionSnippetCard plan={nutritionPlan} fp={fp} />}
-
-          <div className="grid grid-cols-2 gap-3">
-            <QuickAction to="/trainers" icon={<Users className="w-5 h-5" />} title="اكتشفي مدربات" />
-            <QuickAction to="/chat" icon={<MessageCircle className="w-5 h-5" />} title="الشات" badge={unreadCount} />
-          </div>
+          {role === "trainer" && <TrainerHome userId={user!.id} unreadCount={unreadCount} />}
         </>
       )}
-
-      {role === "trainer" && <TrainerHome userId={user!.id} unreadCount={unreadCount} />}
     </div>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* شاشة "عم نجهّزلك بياناتك" — بتظهر بمكان كل الـ Skeletons المتفرقة      */
+/* أثناء أول تحميل للصفحة (بالذات المستخدمة الجديدة بعد الـ onboarding)   */
+/* ------------------------------------------------------------------ */
+
+function PreparingDataScreen() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center text-center py-16 gap-4"
+    >
+      <motion.div
+        animate={{ scale: [1, 1.08, 1] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+        className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-elegant"
+      >
+        <Sparkles className="w-8 h-8 text-primary-foreground" />
+      </motion.div>
+      <div>
+        <h2 className="font-extrabold text-lg">عم نجهّزلك كل شي...</h2>
+        <p className="text-sm text-muted-foreground mt-1 max-w-[240px]">
+          لحظات بسيطة وبتكون خطتك وبياناتك جاهزة ✨
+        </p>
+      </div>
+    </motion.div>
+  );
+}
 /* ------------------------------------------------------------------ */
 /* البطل: تمرين اليوم — مبني فعلياً على الخطة المعتمدة بصفحة التمارين     */
 /* ------------------------------------------------------------------ */

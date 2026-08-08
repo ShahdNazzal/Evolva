@@ -1,3 +1,5 @@
+//C:\Users\lenovo\Downloads\jammawia-main (1)\jammawia-main\src\lib\workout-rules.ts
+
 import { supabase } from "@/integrations/supabase/client";
 
 export type Goal = "lose_weight" | "gain_muscle" | "fitness" | "tone";
@@ -12,29 +14,38 @@ export interface FitnessInput {
 }
 
 /**
- * Deterministic workout matcher.
- * Priority: exact equipment + goal → same goal any equipment → fitness fallback.
+ * Strict workout matcher.
+ *
+ * القاعدة: خطة الكوتش لازم تطابق goal + activity_level + equipment تبع
+ * المستخدمة بالضبط الثلاثة مع بعض (بغض النظر مين الكوتشة الي نشرتها).
+ * ما في "أقرب حل" ولا نقاط تقريبية — إذا ما في خطة منشورة (is_public)
+ * مطابقة تماماً على الثلاثة، بترجع null وما بينحط أي تمرين تلقائي،
+ * وبتضل المستخدمة تعتمد خطة بنفسها من صفحة التمارين (SwitchDialog).
+ *
+ * frequency وحدها منستخدمها كـ tie-breaker بس (مش شرط تطابق تام)، لأنه
+ * منطقياً خطة تتطلب أيام أقل أو تساوي اللي المستخدمة قادرة تلتزم فيها
+ * بتضل قابلة للتطبيق، وما لازم نستبعدها بسبب هيك فرق بسيط.
  */
 export async function matchWorkoutPlan(input: FitnessInput) {
-  const { data: all, error } = await supabase.from("workouts").select("*");
+  const { data: candidates, error } = await supabase
+    .from("workouts")
+    .select("*")
+    .eq("is_public", true)
+    .eq("goal", input.goal)
+    .eq("activity_level", input.activity_level)
+    .eq("equipment", input.equipment)
+    .not("trainer_id", "is", null); // بس خطط الكوتشات المنشورة، مش الخطط الشخصية لمستخدمات تانيات
+
   if (error) throw error;
-  if (!all || all.length === 0) return null;
+  if (!candidates || candidates.length === 0) return null;
 
-  const activityRank = { sedentary: 0, light: 1, moderate: 2, high: 3 } as const;
-  const target = activityRank[input.activity_level];
+  // من بين الخطط المتطابقة تماماً بالثلاثة، منفضّل يلي min_frequency تبعها
+  // ما بتتطلب من المستخدمة أيام تدريب أكتر مما اختارت، وأقرب عدد أيام لطلبها.
+  const feasible = candidates.filter((w) => w.min_frequency <= input.frequency);
+  const pool = feasible.length > 0 ? feasible : candidates;
+  pool.sort((a, b) => b.min_frequency - a.min_frequency);
 
-  const scored = all.map((w) => {
-    let score = 0;
-    if (w.goal === input.goal) score += 100;
-    if (w.equipment === input.equipment) score += 50;
-    if (w.equipment === "none") score += 10;
-    if (w.min_frequency <= input.frequency) score += 20;
-    const wLevel = activityRank[w.activity_level as ActivityLevel];
-    score -= Math.abs(wLevel - target) * 5;
-    return { w, score };
-  });
-  scored.sort((a, b) => b.score - a.score);
-  return scored[0].w;
+  return pool[0];
 }
 
 export function calcBMI(heightCm: number, weightKg: number) {

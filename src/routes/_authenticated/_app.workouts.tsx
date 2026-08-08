@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dumbbell, Plus, CheckCircle2, Timer, X, Calendar, Trash2,
   ImagePlus, ChevronDown, ChevronUp, Play, Youtube, Moon, Pencil,
-  Droplets, PartyPopper, GripVertical,
+  Droplets, PartyPopper, GripVertical, Users, Sparkles, ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -217,6 +217,28 @@ function WorkoutCompletionCard({ open, onClose }: { open: boolean; onClose: () =
   );
 }
 
+// ---------- بانر "اكتشفي مدربات" — نصيحة أنيقة توجّه المستخدمة لصفحة المدربات لاعتماد خطة تناسبها ----------
+
+function DiscoverTrainersBanner() {
+  return (
+    <Link
+      to="/trainers"
+      className="flex items-center gap-3 p-3.5 rounded-2xl bg-muted/50 hover:bg-muted transition-colors border border-border/50"
+    >
+      <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center shrink-0">
+        <Users className="w-4 h-4 text-primary-foreground" />
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-bold truncate">اكتشفي مدربات واعتمدي خطة تناسبك</p>
+        <p className="text-[10px] text-muted-foreground truncate">خطط جاهزة صممتها مدربات محترفات</p>
+      </div>
+
+      <ArrowLeft className="w-4 h-4 text-muted-foreground shrink-0" />
+    </Link>
+  );
+}
+
 function WorkoutsPage() {
   const { user } = useAuth();
   const [active, setActive] = useState<any>(null);
@@ -401,6 +423,9 @@ function WorkoutsPage() {
           )}
         </Card>
       )}
+
+      {/* نصيحة أنيقة بتوجّه المستخدمة لصفحة اكتشاف المدربات، بتظهر دايماً تحت الجدول الأسبوعي */}
+      {!loading && <DiscoverTrainersBanner />}
 
       <div className="pt-4">
         <div className="flex items-center justify-between mb-3 gap-2">
