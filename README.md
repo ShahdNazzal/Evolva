@@ -230,29 +230,29 @@ The same principle can be applied to nutrition and coaching.
 
 ---
 
-## 📸 Screenshots
+📸 Screenshots
 
-### Home Dashboard
+Home Dashboard
 
-![Evolva Home Dashboard](screenshots/home.png)
+<img src="screenshots/home.png" alt="Evolva Home Dashboard" width="280">
 
-### Weekly Workout Schedule
+Weekly Workout Schedule
 
-![Evolva Workout Calendar](screenshots/workout-calendar.png)
+<img src="screenshots/workout-calendar.png" alt="Evolva Workout Calendar" width="280">
 
-### Nutrition Plan
+Nutrition Plan
 
-![Evolva Nutrition](screenshots/nutrition.png)
+<img src="screenshots/nutrition.png" alt="Evolva Nutrition" width="280">
 
-### Workout Details
+Workout Details
 
-![Evolva Workouts](screenshots/workouts.png)
+<img src="screenshots/workouts.png" alt="Evolva Workouts" width="280">
 
-### AIVA Fitness Assistant
+AIVA Fitness Assistant
 
-![Evolva AIVA](screenshots/aiva.png)
+<img src="screenshots/aiva.png" alt="Evolva AIVA" width="280">
 
-> **Note:** Add the provided screenshots to a `screenshots/` folder in the repository using the filenames above, or update the paths in this README to match your actual filenames.
+Note: Add the provided screenshots to a screenshots/ folder in the repository using the filenames above, or update the paths in this README to match your actual filenames.
 
 ---
 
