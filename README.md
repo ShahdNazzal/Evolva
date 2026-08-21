@@ -244,7 +244,7 @@ Nutrition Plan
 
 <img src="screenshots/nutrition.png" alt="Evolva Nutrition" width="280">
 
-Workout Details
+Chatting 
 
 <img src="screenshots/workouts.png" alt="Evolva Workouts" width="280">
 
