@@ -1,18 +1,6 @@
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
-export async function chatbotHandler(history: ChatTurn[]) {
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content: `أنت مدرب رياضي محترف داخل تطبيق "EVOLVA"، ومتخصص بشكل خاص بالتدريب الرياضي للنساء.
+const SYSTEM_PROMPT = `أنت مدرب رياضي محترف داخل تطبيق "EVOLVA"، ومتخصص بشكل خاص بالتدريب الرياضي للنساء.
 
 # قواعد اللغة (مهم جداً، لا تخالفيها):
 - إذا كتب المستخدم رسالته بالعربي، ردّي عليه بالعربي فقط بالكامل.
@@ -99,15 +87,105 @@ export async function chatbotHandler(history: ChatTurn[]) {
 
 (لازم تكون مصفوفة exercises فيها 7 عناصر بالضبط دائماً، بغض النظر عن عدد أيام التدريب المطلوبة فعلياً، ولازم كل يوم تدريب فعلي فيه أربعة تمارين على الأقل)
 
-إذا لم يطلب المستخدم إنشاء أو تعديل خطة (سؤال عام، استفسار، نصيحة)، ردّي بنص طبيعي عادي فقط بدون أي JSON إطلاقاً، مع الالتزام بقاعدة الاعتماد على العلم وقاعدة اللغة أعلاه.`,
+إذا لم يطلب المستخدم إنشاء أو تعديل خطة (سؤال عام، استفسار، نصيحة)، ردّي بنص طبيعي عادي فقط بدون أي JSON إطلاقاً، مع الالتزام بقاعدة الاعتماد على العلم وقاعدة اللغة أعلاه.`;
+
+function cleanJsonFence(raw: string): string {
+  return raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+}
+
+// ---------- المحاولة الأساسية: Gemini ----------
+async function callGemini(history: ChatTurn[]): Promise<string> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+  // Gemini يفرّق بين "user" و"model" (مش "assistant")، فبنحول التسمية هون
+  const geminiContents = history.map((h) => ({
+    role: h.role === "assistant" ? "model" : "user",
+    parts: [{ text: h.content }],
+  }));
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: SYSTEM_PROMPT }],
         },
-        ...history.map((h) => ({ role: h.role, content: h.content })),
-      ],
-      temperature: 0.3,
-    }),
-  });
+        contents: geminiContents,
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 8000,
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => null);
+    console.error("Gemini API error:", errData);
+    const err = new Error(`Gemini error ${response.status}`);
+    throw err;
+  }
 
   const data = await response.json();
 
-  return data?.choices?.[0]?.message?.content ?? "لم يتم إنشاء رد";
+  const raw =
+    data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "لم يتم إنشاء رد";
+
+  return cleanJsonFence(raw);
+}
+
+// ---------- الاحتياطي (Fallback): Groq ----------
+async function callGroq(history: ChatTurn[]): Promise<string> {
+  const response = await fetch(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        // llama-3.3-70b-versatile صار deprecated بقروك، هاد البديل الرسمي
+        model: "openai/gpt-oss-120b",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          ...history.map((h) => ({ role: h.role, content: h.content })),
+        ],
+        temperature: 0.3,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => null);
+    console.error("Groq API error:", errData);
+    const err = new Error(`Groq error ${response.status}`);
+    throw err;
+  }
+
+  const data = await response.json();
+
+  const raw = data?.choices?.[0]?.message?.content ?? "لم يتم إنشاء رد";
+
+  return cleanJsonFence(raw);
+}
+
+// ---------- المدخل الرئيسي: Gemini أولاً، وإذا فشل (429/404/أي خطأ) → Groq ----------
+export async function chatbotHandler(history: ChatTurn[]): Promise<string> {
+  try {
+    return await callGemini(history);
+  } catch (geminiErr) {
+    console.error("Gemini فشل، جرّب Groq كبديل:", geminiErr);
+
+    try {
+      return await callGroq(history);
+    } catch (groqErr) {
+      console.error("Groq كمان فشل:", groqErr);
+      return "حدث خطأ أثناء التواصل مع AIVA، جرّبي مرة ثانية بعد شوي.";
+    }
+  }
 }
