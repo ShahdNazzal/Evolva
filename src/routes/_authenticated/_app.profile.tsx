@@ -30,6 +30,8 @@ import {
   Trash2,
   Instagram,
   Menu,
+  BadgeCheck,
+  LogOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import { GOAL_LABELS } from "@/lib/workout-rules";
@@ -143,6 +145,7 @@ function ProfilePage() {
   const [openPost, setOpenPost] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -179,6 +182,32 @@ function ProfilePage() {
     } catch (err: any) { toast.error(err.message); }
   };
 
+  /* حذف منشور — للمالكة فقط، وهاي صفحتها الشخصية أصلاً */
+  const handleDeletePost = async (post: any) => {
+    if (!post?.id) return;
+    const confirmed = window.confirm("متأكدة إنك بدك تحذفي هالمنشور؟ ما في رجعة بعد الحذف.");
+    if (!confirmed) return;
+    setDeletingPostId(post.id);
+    try {
+      const { error } = await supabase.from("posts").delete().eq("id", post.id);
+      if (error) throw error;
+      toast.success("تم حذف المنشور");
+      setOpenPost(null);
+      load();
+    } catch (err: any) {
+      console.error("delete post error:", err);
+      toast.error(err.message ?? "تعذّر حذف المنشور");
+    } finally {
+      setDeletingPostId(null);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setSidebarOpen(false);
+    await signOut();
+    navigate({ to: "/auth" });
+  };
+
   const chartData = progress.map((p) => ({
     date: new Date(p.logged_at).toLocaleDateString("ar", { day: "numeric", month: "short" }),
     weight: +p.weight,
@@ -204,7 +233,12 @@ function ProfilePage() {
       {/* 1. الرأس — اسم + زر القائمة الجانبية + الإعدادات              */}
       {/* ============================================================ */}
       <div className="flex items-center justify-between px-4 pt-5">
-        <div className="font-extrabold text-lg truncate">{profile?.full_name ?? "…"}</div>
+        <div className="font-extrabold text-lg truncate flex items-center gap-1.5">
+          {profile?.full_name ?? "…"}
+          {isTrainer && (
+            <BadgeCheck className="w-4 h-4 text-primary shrink-0" fill="currentColor" strokeWidth={0} />
+          )}
+        </div>
         <div className="flex items-center gap-1 shrink-0">
           <Button
             variant="ghost"
@@ -229,15 +263,15 @@ function ProfilePage() {
       {/* 2. الصورة الشخصية + الإحصائيات                                */}
       {/* ============================================================ */}
       <div className="flex items-center gap-5 px-4 mt-3">
-        <button onClick={() => avatarInput.current?.click()} className="relative shrink-0">
+        <button onClick={() => avatarInput.current?.click()} className="relative shrink-0 group">
           {profile?.avatar_url ? (
             <img
               src={profile.avatar_url}
               alt="avatar"
-              className="w-20 h-20 rounded-full object-cover ring-2 ring-primary/25 shadow-soft"
+              className="w-20 h-20 rounded-full object-cover ring-2 ring-primary/25 shadow-soft transition group-hover:ring-4 group-hover:ring-primary/35"
             />
           ) : (
-            <div className="w-20 h-20 rounded-full gradient-primary ring-2 ring-primary/25 shadow-soft flex items-center justify-center text-2xl font-extrabold text-primary-foreground">
+            <div className="w-20 h-20 rounded-full gradient-primary ring-2 ring-primary/25 shadow-soft flex items-center justify-center text-2xl font-extrabold text-primary-foreground transition group-hover:ring-4 group-hover:ring-primary/35">
               {profile?.full_name?.[0] ?? "؟"}
             </div>
           )}
@@ -286,7 +320,10 @@ function ProfilePage() {
       {/* ============================================================ */}
       <div className="px-10 mt-6">
         <div className="flex items-center justify-between mb-3">
-          <div className="font-bold text-sm">منشوراتي</div>
+          <div className="flex items-center gap-2">
+            <div className="font-bold text-sm">منشوراتي</div>
+            <div className="h-[3px] w-6 rounded-full gradient-primary" />
+          </div>
           <Button size="sm" onClick={() => setNewPostOpen(true)} className="rounded-xl gradient-primary font-bold">
             <ImagePlus className="w-4 h-4 ml-1" /> منشور جديد
           </Button>
@@ -302,11 +339,36 @@ function ProfilePage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {posts.map((p) => (
-              <PostCard key={p.id} post={p} onOpen={() => setOpenPost(p)} />
+            {posts.map((p, i) => (
+              <motion.div
+                key={p.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(i, 6) * 0.05, duration: 0.3 }}
+              >
+                <PostCard
+                  post={p}
+                  onOpen={() => setOpenPost(p)}
+                  onDelete={handleDeletePost}
+                  isDeleting={deletingPostId === p.id}
+                />
+              </motion.div>
             ))}
           </div>
         )}
+      </div>
+
+      {/* ============================================================ */}
+      {/* 6. تسجيل الخروج — بأسفل الصفحة الرئيسية أيضاً                  */}
+      {/* ============================================================ */}
+      <div className="px-10 mt-8">
+        <button
+          onClick={handleSignOut}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-border/60 text-sm font-bold text-muted-foreground hover:text-destructive hover:border-destructive/40 transition"
+        >
+          <LogOut className="w-4 h-4" />
+          تسجيل الخروج
+        </button>
       </div>
 
       {/* ============================================================ */}
@@ -337,6 +399,13 @@ function ProfilePage() {
                   >
                     <X className="w-4 h-4 text-white" />
                   </button>
+                  <button
+                    onClick={() => handleDeletePost(openPost)}
+                    disabled={deletingPostId === openPost.id}
+                    className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center"
+                  >
+                    <Trash2 className="w-4 h-4 text-white" />
+                  </button>
                 </div>
               ) : (
                 <div className="relative gradient-primary text-primary-foreground p-8 min-h-[220px] flex items-center">
@@ -346,6 +415,13 @@ function ProfilePage() {
                     className="absolute top-3 left-3 w-8 h-8 rounded-full bg-black/20 flex items-center justify-center"
                   >
                     <X className="w-4 h-4 text-white" />
+                  </button>
+                  <button
+                    onClick={() => handleDeletePost(openPost)}
+                    disabled={deletingPostId === openPost.id}
+                    className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/20 flex items-center justify-center"
+                  >
+                    <Trash2 className="w-4 h-4 text-white" />
                   </button>
                   <p className="text-base font-bold leading-relaxed relative">{openPost.content}</p>
                 </div>
@@ -525,11 +601,7 @@ function ProfilePage() {
                 {/* —— تسجيل الخروج —— */}
                 <Button
                   variant="outline"
-                  onClick={async () => {
-                    setSidebarOpen(false);
-                    await signOut();
-                    navigate({ to: "/auth" });
-                  }}
+                  onClick={handleSignOut}
                   className="w-full rounded-2xl font-bold mt-2"
                 >
                   تسجيل الخروج
@@ -654,7 +726,17 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
 /* بطاقة منشور كبيرة — بأسلوب إنستقرام (فيد)                          */
 /* ================================================================ */
 
-function PostCard({ post, onOpen }: { post: any; onOpen: () => void }) {
+function PostCard({
+  post,
+  onOpen,
+  onDelete,
+  isDeleting,
+}: {
+  post: any;
+  onOpen: () => void;
+  onDelete: (post: any) => void;
+  isDeleting?: boolean;
+}) {
   const hasImage = !!post.image_url;
   const dateStr = new Date(post.created_at).toLocaleDateString("ar", {
     day: "numeric",
@@ -663,11 +745,20 @@ function PostCard({ post, onOpen }: { post: any; onOpen: () => void }) {
   });
 
   return (
-    <motion.button
+    <motion.div
       whileTap={{ scale: 0.98 }}
       onClick={onOpen}
-      className="w-full rounded-2xl overflow-hidden bg-card border border-border/50 shadow-sm text-right"
+      className="relative w-full rounded-2xl overflow-hidden bg-card border border-border/50 shadow-sm text-right cursor-pointer"
     >
+      {/* زر حذف المنشور — للمالكة */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(post); }}
+        disabled={isDeleting}
+        className="absolute top-2.5 left-2.5 z-10 w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white transition hover:bg-destructive disabled:opacity-50"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+
       {hasImage ? (
         <img
           src={post.image_url}
@@ -686,7 +777,7 @@ function PostCard({ post, onOpen }: { post: any; onOpen: () => void }) {
         )}
         <div className="text-[11px] text-muted-foreground">{dateStr}</div>
       </div>
-    </motion.button>
+    </motion.div>
   );
 }
 
@@ -875,30 +966,60 @@ function WeightHistoryDialog({ open, onClose, logs, onEdit, userId, fp, onSaved 
 }
 
 /* ================================================================ */
-/* حوار منشور جديد                                                    */
+/* حوار منشور جديد — نص فقط (بأسلوب تويتة) أو مع صورة                 */
 /* ================================================================ */
 
 function NewPostDialog({ open, onClose, userId, onSaved }: any) {
+  const [mode, setMode] = useState<"text" | "photo">("text");
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const reset = () => {
+    setContent("");
+    setFile(null);
+    setMode("text");
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
       <DialogContent className="rounded-3xl w-[92vw] max-w-md" dir="rtl">
         <DialogHeader><DialogTitle>منشور جديد</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <Textarea value={content} onChange={(e) => setContent(e.target.value)} className="rounded-xl min-h-24" placeholder="اكتبي كابشن..." />
-          <div className="space-y-1.5">
-            <Label className="text-xs">صورة (اختياري)</Label>
-            <Input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="rounded-xl" />
-            {file && <div className="text-xs text-muted-foreground">{file.name}</div>}
+          {/* مبدّل نوع المنشور */}
+          <div className="flex p-1 rounded-2xl bg-muted/60 gap-1">
+            <button
+              onClick={() => { setMode("text"); setFile(null); }}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${
+                mode === "text" ? "bg-background shadow-sm text-primary" : "text-muted-foreground"
+              }`}
+            >
+              نص فقط
+            </button>
+            <button
+              onClick={() => setMode("photo")}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${
+                mode === "photo" ? "bg-background shadow-sm text-primary" : "text-muted-foreground"
+              }`}
+            >
+              بصورة
+            </button>
           </div>
 
+          <Textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className={mode === "text" ? "rounded-xl min-h-32" : "rounded-xl min-h-20"}
+            placeholder={mode === "text" ? "شو بخاطرك؟ اكتبي أي شي إلك..." : "اكتبي كابشن..."}
+          />
 
-
-
-
-
+          {mode === "photo" && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">صورة</Label>
+              <Input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="rounded-xl" />
+              {file && <div className="text-xs text-muted-foreground">{file.name}</div>}
+            </div>
+          )}
 
           <Button
             disabled={saving}
@@ -911,38 +1032,16 @@ function NewPostDialog({ open, onClose, userId, onSaved }: any) {
                 const { error } = await supabase.from("posts").insert({ author_id: userId, trainer_id: userId, content: content || "", image_url });
                 if (error) throw error;
                 toast.success("تم النشر");
-                setContent(""); setFile(null); onClose(); onSaved();
+                reset();
+                onClose();
+                onSaved();
               } catch (err: any) { toast.error(err.message); }
               finally { setSaving(false); }
             }}
             className="rounded-2xl gradient-primary w-full font-bold"
           >{saving ? "جاري النشر..." : "نشر"}</Button>
         </div>
-
-
-
-
-
-
-
-
       </DialogContent>
-
-
-
-
-
-
-
-
     </Dialog>
-
-
-
- 
-
-
-
   );
 }
-
