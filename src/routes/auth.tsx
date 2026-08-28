@@ -1,3 +1,5 @@
+//C:\Users\lenovo\Downloads\jammawia-main (1)\jammawia-main\src\routes\auth.tsx
+
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { motion } from "framer-motion";

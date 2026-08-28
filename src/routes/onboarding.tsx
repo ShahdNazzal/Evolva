@@ -1,3 +1,4 @@
+//C:\Users\lenovo\Downloads\jammawia-main (1)\jammawia-main\src\routes\onboarding.tsx
 import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
